@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "utme-pass-at-once-36340"
+  },
+  "targets": {
+    "utme-pass-at-once-36340": {
+      "hosting": {
+        "admin": [
+          "utme-pass-at-once-36340"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

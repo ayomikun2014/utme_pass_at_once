@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================
+    // HELPERS
+    // =========================================================
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Basic Admin Check (Active)
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        (!("isActive" in adminDoc().data) || adminDoc().data.isActive == true);
+    }
+
+    // Strict Super Admin Check
+    function isSuperAdmin() {
+      return isAdmin() && (
+        adminDoc().data.get('role', '') == 'Super Admin' || 
+        adminDoc().data.get('role', '') == 'super_admin'
+      );
+    }
+
+    function adminFieldsAreValid() {
+      return request.resource.data.keys().hasAny(['email', 'role']);
+    }
+
+    function voucherFieldsAreValid() {
+      return request.resource.data.keys().hasAny(['code', 'status']);
+    }
+
+    // =========================================================
+    // 1. ADMINS
+    // =========================================================
+    match /admins/{adminId} {
+      // ✅ UPDATED: Allow any signed-in user to read admin profiles
+      // (Needed to fetch center names during voucher unlock and eClassroom)
+      allow read: if signedIn();
+
+      // ✅ UPDATED: Secure Self-Registration.
+      // Super Admins can create any admin. 
+      // New users can create their own profile, but MUST be unapproved initially,
+      // EXCEPT the site owners who are hardcoded to be allowed.
+      allow create: if isSuperAdmin() || (
+        signedIn() 
+        && !exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && adminId == request.auth.uid
+        && request.resource.data.get('role', '') != 'Super Admin'
+        && request.resource.data.get('role', '') != 'super_admin'
+        && (
+          request.resource.data.get('isApproved', false) == false || 
+          request.auth.token.email in ['ogunfolajinf32@gmail.com', 'taiwoprints999@gmail.com']
+        )
+      );
+
+      allow update: if isSuperAdmin() || (
+          isOwner(adminId)
+          && request.resource.data.get('role', '') == resource.data.get('role', '')
+          && request.resource.data.get('isApproved', false) == resource.data.get('isApproved', false)
+          && request.resource.data.get('isActive', true) == resource.data.get('isActive', true)
+        );
+
+      allow delete: if isSuperAdmin();
+
+      // eClassroom Sub-collections
+      match /notices/{docId} {
+        allow read: if signedIn();
+        allow write: if isOwner(adminId) || isSuperAdmin();
+      }
+      match /tests/{docId} {
+        allow read: if signedIn();
+        allow write: if isOwner(adminId) || isSuperAdmin();
+
+        match /questions/{questionId} {
+          allow read: if signedIn();
+          allow write: if isOwner(adminId) || isSuperAdmin();
+        }
+        match /attempts/{studentId} {
+          allow read: if isOwner(adminId) || isSuperAdmin() || (signedIn() && request.auth.uid == studentId);
+          allow write: if isOwner(adminId) || isSuperAdmin() || (signedIn() && request.auth.uid == studentId);
+        }
+      }
+      match /assignments/{docId} {
+        allow read: if signedIn();
+        allow write: if isOwner(adminId) || isSuperAdmin();
+
+        match /submissions/{studentId} {
+          allow read: if isOwner(adminId) || isSuperAdmin() || (signedIn() && request.auth.uid == studentId);
+          allow write: if isOwner(adminId) || isSuperAdmin() || (signedIn() && request.auth.uid == studentId);
+        }
+      }
+      match /study_notes/{docId} {
+        allow read: if signedIn();
+        allow write: if isOwner(adminId) || isSuperAdmin();
+      }
+    }
+
+    // =========================================================
+    // 2. USERS
+    // =========================================================
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // =========================================================
+    // 3. QUESTION BANK & QUESTIONS
+    // =========================================================
+    match /questionBank/{document=**} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin(); // Locked to Super Admin
+    }
+
+    match /questions/{document=**} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin(); // Locked to Super Admin
+    }
+
+    match /{path=**}/questions/{questionId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+    match /{path=**}/subjects/{subjectId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+    match /{path=**}/years/{yearId} {
+      allow read: if signedIn();
+      allow write: if isSuperAdmin();
+    }
+
+    // =========================================================
+    // 4. SYLLABUS, NEWS, APP SETTINGS
+    // =========================================================
+    match /syllabus/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    match /news/{document=**} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+    }
+    
+    // Only Super Admins can touch App Settings
+    match /app_settings/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin(); 
+    }
+
+    match /admin_broadcasts/{document=**} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // ADMIN NOTIFICATION 👇
+    match /notifications/{document=**} {
+      // Users need to read them, Admins/Sub-Admins/Super Admins need to create them
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================
+    // 5. USER SUB-COLLECTIONS (Notifications, FCM Tokens)
+    // =========================================================
+    match /users/{userId}/notifications/{notiId} {
+      allow read, update, delete: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /users/{userId}/fcmTokens/{tokenId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /users/{userId}/exam_history/{historyId} {
+      allow read: if signedIn();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // =========================================================
+    // 6. VOUCHERS
+    // =========================================================
+    match /vouchers/{voucherId} {
+      // Any signed-in user can read (needed for validation and queries)
+      allow read: if signedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (
+          signedIn()
+          && request.resource.data.status == 'used'
+          && request.resource.data.usedByUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'isUsed', 'usedByUid', 'usedAt', 'updatedAt'])
+        );
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // 7. PAYMENTS & AUDIT 
+    // =========================================================
+    match /payment_transactions/{txId} {
+      // ✅ UPDATED: Allowed Admin to easily read payments to verify receipts, and sub-admins can read their own
+      allow read: if signedIn() && (
+        resource.data.uid == request.auth.uid || 
+        resource.data.userId == request.auth.uid || 
+        resource.data.subAdminUid == request.auth.uid || 
+        isAdmin()
+      );
+      
+      // ✅ UPDATED: Allows Sub-Admins to create purchase requests via subAdminUid, and Admins to manage them
+      allow create: if isAdmin() || (signedIn() && (
+        request.resource.data.uid == request.auth.uid || 
+        request.resource.data.userId == request.auth.uid || 
+        request.resource.data.subAdminUid == request.auth.uid
+      ));
+      
+      // ✅ UPDATED: Cleaned up Admin approval rules
+      allow update: if isAdmin() || (
+        signedIn() && (
+          (resource.data.uid == request.auth.uid || resource.data.subAdminUid == request.auth.uid || resource.data.userId == request.auth.uid) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voucherCode', 'updatedAt', 'hiddenByUser', 'userHiddenAt', 'userHiddenByUid'])
+        )
+      );
+
+      // ✅ UPDATED: Allow Admins to delete transactions for cleanup
+      allow delete: if isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /purchases/{purchaseId} {
+      // ✅ UPDATED: Allowing Admins to create a purchase on behalf of a user
+      allow create: if (signedIn() && request.resource.data.uid == request.auth.uid) || isAdmin();
+      allow read: if isOwner(resource.data.uid) || isAdmin();
+      allow update: if isOwner(resource.data.uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // =========================================================
+    // 8. ADMISSION DATA (GENERIC FOR ALL SCHOOLS)
+    // =========================================================
+    match /{collectionId}/{docId} {
+      allow read: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$');
+      allow write: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$') && isSuperAdmin();
+
+      match /faculties/{facultyId} {
+        allow read: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$');
+        allow write: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$') && isSuperAdmin();
+      }
+    }
+
+    // =========================================================
+    // 9. STUDY NOTES
+    // =========================================================
+    match /study_notes/{docId} {
+      allow read: if true;
+      allow write: if isSuperAdmin();
+
+      match /subjects/{subjectId} {
+        allow read: if true;
+        allow write: if isSuperAdmin();
+      }
+    }
+
+    // =========================================================
+    // 10. VIDEOS & TUTORIALS
+    // =========================================================
+    match /videos/{docId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // =========================================================
+    // 11. DEFAULT DENY
+    // =========================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

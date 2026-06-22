@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "931287240100",
+    "project_id": "utme-pass-at-once-36340",
+    "storage_bucket": "utme-pass-at-once-36340.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931287240100:android:03c7eadd415d8a83314531",
+        "android_client_info": {
+          "package_name": "com.funtech.pass_at_once_cbt"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "931287240100-so159gje77ps76oouir2j4s647lfft08.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.funtech.pass_at_once_cbt",
+            "certificate_hash": "dcf98627b26065003533ccb67079cd1e5cbd78aa"
+          }
+        },
+        {
+          "client_id": "931287240100-3n4gpfid4f55obl29btvspap2hf88bor.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPxjimWKPvQL8-JygnSYV6ZlrVRHvYQDU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "931287240100-3n4gpfid4f55obl29btvspap2hf88bor.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "931287240100-mrf8i0vt5u66ll9clr178qig2fqu237o.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.utmePassAtOnce"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

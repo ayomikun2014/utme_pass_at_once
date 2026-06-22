@@ -1,0 +1,55 @@
+# ==========================================
+# Flutter / Dart Defaults
+# ==========================================
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.generated_development_keys
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+.vscode/
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ==========================================
+# Environments, Cache, and Secrets (CRITICAL)
+# ==========================================
+.env
+*.env
+developer_config.json
+secrets.xml
+
+# ==========================================
+# Firebase Local Builds & Logs (Rules/Configs are kept!)
+# ==========================================
+.firebase/
+firestore-debug-ui.log
+ui-debug.log
+firebase-debug.log
+
+# ==========================================
+# Project Specific Exclusions
+# ==========================================
+pubspec.lock
+admin_web_build/
+admin_build/
+scratch/
+analyze_out.txt
+analyze_output.txt
+
+# ==========================================
+# AI Agent Caches & Metadata
+# ==========================================
+.agents/
+skills-lock.json
