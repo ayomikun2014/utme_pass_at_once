@@ -14,6 +14,7 @@ import 'firebase_options.dart';
 import 'core/services/network_service.dart';
 import 'core/config/hive_setup.dart';
 
+import 'core/constants/app_colors.dart';
 import 'core/providers/app_theme_provider.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/user/providers/store_provider.dart';
@@ -29,6 +30,7 @@ import 'features/user/providers/admission_provider.dart';
 import 'features/user/providers/study_notes_provider.dart';
 import 'features/user/providers/manual_payment_provider.dart';
 import 'features/user/providers/video_provider.dart';
+import 'features/user/providers/announcement_provider.dart';
 
 import 'routes.dart';
 
@@ -116,6 +118,7 @@ class UtmePassApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => StudyNotesProvider()),
         ChangeNotifierProvider(create: (_) => ManualPaymentProvider()),
         ChangeNotifierProvider(create: (_) => VideoProvider()),
+        ChangeNotifierProvider(create: (_) => AnnouncementProvider()),
       ],
       child: Consumer<AppThemeProvider>(
         builder: (context, theme, _) {
@@ -124,8 +127,19 @@ class UtmePassApp extends StatelessWidget {
             scaffoldMessengerKey: rootScaffoldMessengerKey,
             debugShowCheckedModeBanner: false,
             themeMode: theme.themeMode,
-            theme: ThemeData.light(),
-            darkTheme: ThemeData.dark(),
+            theme: ThemeData.light().copyWith(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: AppColors.primary,
+                primary: AppColors.primary,
+              ),
+            ),
+            darkTheme: ThemeData.dark().copyWith(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: AppColors.primaryDark,
+                brightness: Brightness.dark,
+                primary: AppColors.primaryDark,
+              ),
+            ),
             routes: AppRoutes.staticRoutes,
             onUnknownRoute: AppRoutes.unknownRoute,
           );

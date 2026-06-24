@@ -372,9 +372,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
     await prefs.setString(key, jsonEncode(_notes));
   }
 
-  void _addNote(String content) {
+  void _addNote(String title, String content) {
     final note = {
       'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'title': title,
       'content': content,
       'createdAt': DateTime.now().toIso8601String(),
     };
@@ -394,7 +395,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
   }
 
   void _showAddNoteSheet(bool isDark) {
-    final controller = TextEditingController();
+    final titleController = TextEditingController();
+    final noteController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -447,7 +449,36 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  constraints: const BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  child: TextField(
+                    controller: titleController,
+                    maxLines: 1,
+                    autofocus: true,
+                    textInputAction: TextInputAction.next,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: "Title (e.g. Newton's First Law)",
+                      hintStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
+                      border: InputBorder.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 120, maxHeight: 220),
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.05)
@@ -459,10 +490,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                   child: TextField(
-                    controller: controller,
+                    controller: noteController,
+                    minLines: 4,
                     maxLines: null,
-                    autofocus: true,
                     keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
                     style: TextStyle(
                       fontSize: 14,
                       height: 1.5,
@@ -478,12 +510,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () {
-                    final text = controller.text.trim();
-                    if (text.isEmpty) {
-                      CustomToast.show(sheetContext, "Please type something first!", isError: true);
+                    final title = titleController.text.trim();
+                    final content = noteController.text.trim();
+                    if (title.isEmpty) {
+                      CustomToast.show(sheetContext, "Please enter a title!", isError: true);
                       return;
                     }
-                    _addNote(text);
+                    if (content.isEmpty) {
+                      CustomToast.show(sheetContext, "Please type a note first!", isError: true);
+                      return;
+                    }
+                    _addNote(title, content);
                     Navigator.pop(sheetContext);
                   },
                   style: ElevatedButton.styleFrom(
@@ -871,12 +908,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
       ],
     );
   }
-
   Widget _buildNoteCard(Map<String, dynamic> note, int index, bool isDark) {
     final content = note['content'] as String? ?? '';
     final createdAt = DateTime.tryParse(note['createdAt'] ?? '') ?? DateTime.now();
-    final preview = content.length > 80 ? '${content.substring(0, 80)}...' : content;
     final dateStr = '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+    
+    // Support backwards compatibility for old notes that don't have a title
+    final title = note['title'] as String? ?? (content.length > 40 ? '${content.substring(0, 40)}...' : content);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -917,7 +955,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
             ),
           ),
           title: Text(
-            preview,
+            title,
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,

@@ -89,7 +89,7 @@ class _SubjectVideosScreenState extends State<SubjectVideosScreen> with SingleTi
                       fit: StackFit.expand,
                       children: [
                         Image.asset(
-                          'assets/images/video_topic_banner.webp',
+                          'assets/images/video_banner.webp',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               const CustomFallbackImage(

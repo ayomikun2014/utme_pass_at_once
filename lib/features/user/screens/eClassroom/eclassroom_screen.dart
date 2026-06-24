@@ -77,7 +77,7 @@ class _EClassroomScreenState extends State<EClassroomScreen> {
                       fit: StackFit.expand,
                       children: [
                         Image.asset(
-                          'assets/images/eClassroom_subject_banner.webp',
+                          'assets/images/eclassroom_banner.webp',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               const CustomFallbackImage(

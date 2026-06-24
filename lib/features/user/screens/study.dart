@@ -362,7 +362,7 @@ final List<Map<String, dynamic>> _examTypes = [
     'subtitle': 'SSCE past questions, syllabus & practice exams.',
     'logo': 'assets/images/waec.webp',
     'examType': 'waec',
-    'isComingSoon': false,
+    'isComingSoon': true,
     'gradientColors': [const Color(0xFFF43F5E), const Color(0xFFE11D48)], // Sunset Coral to Rose Red
   },
   {
@@ -370,7 +370,7 @@ final List<Map<String, dynamic>> _examTypes = [
     'subtitle': 'UTME past questions, syllabus, brochure & simulator.',
     'logo': 'assets/images/jamb.webp',
     'examType': 'jamb',
-    'isComingSoon': false,
+    'isComingSoon': true,
     'gradientColors': [const Color(0xFF0D9488), const Color(0xFF0F766E)], // Sea Mint to Deep Teal
   },
   {
@@ -378,7 +378,7 @@ final List<Map<String, dynamic>> _examTypes = [
     'subtitle': 'SSCE past questions, syllabus & practice exams.',
     'logo': 'assets/images/neco.webp',
     'examType': 'neco',
-    'isComingSoon': false,
+    'isComingSoon': true,
     'gradientColors': [const Color(0xFF2563EB), const Color(0xFF1D4ED8)], // Sapphire Blue to Deep Cobalt
   },
 ];
@@ -433,16 +433,20 @@ class _ExamCardState extends State<_ExamCard> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: widget.gradientColors,
+              colors: dimmed
+                  ? [Colors.grey.shade400, Colors.grey.shade500]
+                  : widget.gradientColors,
             ),
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: widget.gradientColors[0].withValues(alpha: 0.35),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            boxShadow: dimmed
+                ? []
+                : [
+                    BoxShadow(
+                      color: widget.gradientColors[0].withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
           ),
           clipBehavior: Clip.hardEdge,
           child: Stack(

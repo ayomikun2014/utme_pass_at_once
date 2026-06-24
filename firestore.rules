@@ -210,7 +210,11 @@ service cloud.firestore {
     // =========================================================
     match /payment_transactions/{txId} {
       // ✅ UPDATED: Allowed Admin to easily read payments to verify receipts, and sub-admins can read their own
-      allow read: if signedIn() && (
+      // ✅ UPDATED: Allow any signed-in user to fetch a single transaction (needed for voucher activation checks)
+      allow get: if signedIn();
+      
+      // ✅ UPDATED: Only allow users/sub-admins to list/query their own transactions, and admins to list all
+      allow list: if signedIn() && (
         resource.data.uid == request.auth.uid || 
         resource.data.userId == request.auth.uid || 
         resource.data.subAdminUid == request.auth.uid || 
@@ -285,7 +289,15 @@ service cloud.firestore {
     }
 
     // =========================================================
-    // 11. DEFAULT DENY
+    // 11. ANNOUNCEMENTS
+    // =========================================================
+    match /announcements/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // =========================================================
+    // 12. DEFAULT DENY
     // =========================================================
     match /{document=**} {
       allow read, write: if false;

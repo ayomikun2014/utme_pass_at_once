@@ -1,12 +1,14 @@
 import 'package:utme_pass_at_once/core/utils/custom_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/utils/custom_app_bar.dart';
 import '../../../../core/utils/bg.dart';
 import '../../models/question_model.dart';
 import '../../providers/simulator_provider.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 import 'package:utme_pass_at_once/core/utils/rich_content_renderer.dart';
+import '../../../../core/constants/app_colors.dart';
 class BookmarkedQuestionsScreen extends StatefulWidget {
   final String? examType;
   final String? schoolId;
@@ -633,223 +635,402 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
   }
 
   Widget _buildBookmarkCard(
-      ThemeData theme,
-      bool isDark,
-      QuestionModel question,
-      String subject,
-      Map<String, dynamic> sourceBookmark,
-      ) {
+    ThemeData theme,
+    bool isDark,
+    QuestionModel question,
+    String subject,
+    Map<String, dynamic> sourceBookmark,
+  ) {
+    final plainText = extractPlainText(question.content);
+    final year = sourceBookmark['year']?.toString() ?? question.year;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: isDark ? AppColors.surfaceDark : theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+          color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+          width: 1.5,
         ),
         boxShadow: isDark
             ? null
             : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _showQuestionDetailBottomSheet(question, subject, year, sourceBookmark),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '$subject • YEAR $year'.toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
                     ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
+                    IconButton(
+                      icon: Icon(
+                        Icons.bookmark_remove_rounded,
+                        color: Colors.red.withValues(alpha: 0.6),
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _removeBookmark(
+                        question,
+                        subject,
+                        sourceBookmark,
+                      ),
+                      tooltip: 'Remove Bookmark',
                     ),
-                    child: Text(
-                      subject.toUpperCase(),
-                      style: TextStyle(
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  plainText,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Text(
+                      'View Question & Solution',
+                      style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                         color: theme.colorScheme.primary,
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.bookmark_remove_rounded,
-                      color: Colors.red.withValues(alpha: 0.6),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: theme.colorScheme.primary,
                     ),
-                    onPressed: () => _removeBookmark(
-                      question,
-                      subject,
-                      sourceBookmark,
-                    ),
-                    tooltip: 'Remove Bookmark',
-                  ),
-                ],
-              ),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: RichContentRenderer(
-                blocks: question.content,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: List.generate(question.options.length, (index) {
-                  final optionLetter = question.options[index].key;
-
-                  final optionBlocks = question.options[index].content;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.05,
-                            ),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              optionLetter,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: theme.colorScheme.onSurface.withValues(
-                                  alpha: 0.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: RichContentRenderer(
-                              blocks: optionBlocks,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ),
-            ),
-
-            const SizedBox(height: 8),
-            Divider(
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-              height: 1,
-            ),
-
-            Theme(
-              data: theme.copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                iconColor: Colors.green,
-                collapsedIconColor: theme.colorScheme.primary,
-                title: Text(
-                  'View Solution',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: theme.colorScheme.primary,
-                  ),
+                  ],
                 ),
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.green.withValues(alpha: 0.1)
-                          : Colors.green.shade50,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: Colors.green,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 14,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Correct Answer:',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              question.correctAnswer,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: isDark
-                                    ? Colors.green.shade300
-                                    : Colors.green.shade700,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (question.explanation.isNotEmpty) ...[
-                          const SizedBox(height: 16),
-                          Text(
-                            'Explanation:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: isDark
-                                  ? Colors.green.shade300
-                                  : Colors.green.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          RichContentRenderer(
-                            blocks: question.explanation,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  void _showQuestionDetailBottomSheet(
+    QuestionModel question,
+    String subject,
+    String year,
+    Map<String, dynamic> sourceBookmark,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.surfaceDark : theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border.all(
+                  color: isDark ? AppColors.dividerDark : Colors.transparent,
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 40,
+                    height: 4.5,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                subject.toUpperCase(),
+                                style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              Text(
+                                'Exam Year: $year',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.close_rounded, size: 20),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Divider(
+                    color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                    thickness: 1,
+                    height: 1,
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      physics: const BouncingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          RichContentRenderer(
+                            blocks: question.content,
+                            textStyle: GoogleFonts.plusJakartaSans(
+                              fontSize: 15.5,
+                              height: 1.6,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Column(
+                            children: List.generate(question.options.length, (index) {
+                              final optionLetter = question.options[index].key;
+                              final optionBlocks = question.options[index].content;
+                              final isCorrect = optionLetter == question.correctAnswer;
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isCorrect
+                                      ? (isDark ? Colors.green.withValues(alpha: 0.08) : Colors.green.shade50.withValues(alpha: 0.6))
+                                      : (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.shade50),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isCorrect
+                                        ? Colors.green.withValues(alpha: 0.3)
+                                        : (isDark ? AppColors.dividerDark : Colors.grey.shade200),
+                                    width: isCorrect ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        color: isCorrect
+                                            ? Colors.green
+                                            : theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          optionLetter,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isCorrect ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: RichContentRenderer(
+                                          blocks: optionBlocks,
+                                          textStyle: GoogleFonts.plusJakartaSans(
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.onSurface,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 16),
+                          Divider(
+                            color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.green.withValues(alpha: 0.1) : Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.green.withValues(alpha: 0.25),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.check_rounded,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      'Correct Answer:',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 14,
+                                        color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      question.correctAnswer,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (question.explanation.isNotEmpty) ...[
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    'Explanation:',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  RichContentRenderer(
+                                    blocks: question.explanation,
+                                    textStyle: GoogleFonts.plusJakartaSans(
+                                      fontSize: 14,
+                                      height: 1.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.95),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Divider(
+                    color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                    height: 1,
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.check_rounded, size: 18),
+                        label: Text(
+                          'Got it, Close',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

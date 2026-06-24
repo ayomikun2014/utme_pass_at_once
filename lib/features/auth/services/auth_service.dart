@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/config/hive_setup.dart';
 import '../models/local_user.dart';
 import 'package:utme_pass_at_once/features/auth/models/user_model.dart';
@@ -127,46 +128,10 @@ class AuthService {
         firebaseUser = cred.user;
       } else {
         // MOBILE GOOGLE SIGN IN APPROACH (v7.2.0+)
-
-        // FORCE CACHE CLEAR: Prevents the "stale ID token" error
-        await GoogleSignIn.instance.signOut();
-
-        // 1. Identity: Trigger the new system-level account picker
-        //    In v7.2.0+, authenticate() throws on cancellation (non-nullable return).
-        late final GoogleSignInAccount googleUser;
-        try {
-          googleUser = await GoogleSignIn.instance.authenticate();
-        } catch (e) {
-          debugPrint('Google Sign-In was cancelled by the user: $e');
-          return null;
-        }
-
-        // 2. Authentication: Get the ID Token (synchronous getter in v7.x)
-        final googleAuth = googleUser.authentication;
-        final idToken = googleAuth.idToken;
-
-        if (idToken == null) {
-          throw Exception(
-            'Google Sign-In failed securely: No ID Token generated.',
-          );
-        }
-
-        // 3. Authorization: Explicitly request the Access Token
-        final authClient = await googleUser.authorizationClient.authorizeScopes(
-          ['email', 'profile'],
-        );
-        final accessToken = authClient.accessToken;
-
-        // 4. Create the Firebase Credential using the separated tokens
-        final credential = GoogleAuthProvider.credential(
-          idToken: idToken,
-          accessToken: accessToken,
-        );
-
-        final cred = await _auth.signInWithCredential(credential);
-        firebaseUser = cred.user;
-        defaultEmail = googleUser.email;
-        defaultName = googleUser.displayName;
+        firebaseUser = await _signInWithGoogleMobileWithRetry();
+        if (firebaseUser == null) return null;
+        defaultEmail = firebaseUser.email;
+        defaultName = firebaseUser.displayName;
       }
 
       if (firebaseUser == null) {
@@ -201,6 +166,13 @@ class AuthService {
       debugPrint(
         'Google Sign-In FirebaseAuthException [${e.code}]: ${e.message}\n$stackTrace',
       );
+      final isStale = e.code == 'invalid-credential' || 
+                      (e.message != null && e.message!.contains('stale'));
+      if (isStale) {
+        throw Exception(
+          "Your phone's date and time are incorrect. Please go to your settings and correct your date and time to continue.",
+        );
+      }
       throw Exception(_handleAuthError(e.code, isGoogle: true));
     } catch (e, stackTrace) {
       debugPrint('Google Sign-In General Exception: $e\n$stackTrace');
@@ -209,6 +181,130 @@ class AuthService {
         rethrow;
       }
       throw Exception('Google Sign-In Error: $e');
+    }
+  }
+
+  Future<User?> _signInWithGoogleMobileWithRetry({bool isRetry = false}) async {
+    try {
+      await GoogleSignIn.instance.signOut();
+
+      final GoogleSignInAccount googleUser;
+      try {
+        googleUser = await GoogleSignIn.instance.authenticate();
+      } catch (e) {
+        debugPrint('Google Sign-In was cancelled by the user: $e');
+        return null;
+      }
+
+      final googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Google Sign-In failed securely: No ID Token generated.');
+      }
+
+      final authClient = await googleUser.authorizationClient.authorizeScopes(
+        ['email', 'profile'],
+      );
+      final accessToken = authClient.accessToken;
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final cred = await _auth.signInWithCredential(credential);
+      return cred.user;
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Google Mobile Sign-In FirebaseAuthException [${e.code}]: ${e.message}');
+      final isStale = e.code == 'invalid-credential' || 
+                      (e.message != null && e.message!.contains('stale'));
+      if (isStale && !isRetry) {
+        debugPrint('⚠️ Stale Google ID token detected. Disconnecting and retrying...');
+        try {
+          await GoogleSignIn.instance.disconnect();
+        } catch (discErr) {
+          debugPrint('Error during Google disconnect: $discErr');
+        }
+        return await _signInWithGoogleMobileWithRetry(isRetry: true);
+      }
+      rethrow;
+    } catch (e) {
+      debugPrint('Google Mobile Sign-In Exception: $e');
+      final isStale = e.toString().contains('invalid-credential') || 
+                      e.toString().contains('stale');
+      if (isStale && !isRetry) {
+        debugPrint('⚠️ Stale Google ID token detected (general catch). Disconnecting and retrying...');
+        try {
+          await GoogleSignIn.instance.disconnect();
+        } catch (discErr) {
+          debugPrint('Error during Google disconnect: $discErr');
+        }
+        return await _signInWithGoogleMobileWithRetry(isRetry: true);
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _reauthenticateGoogleMobileWithRetry(User user, {bool isRetry = false}) async {
+    try {
+      await GoogleSignIn.instance.signOut();
+      final GoogleSignInAccount googleUser;
+      try {
+        googleUser = await GoogleSignIn.instance.authenticate();
+      } catch (e) {
+        debugPrint('Google Re-auth was cancelled by the user: $e');
+        throw Exception('Google re-authentication was cancelled.');
+      }
+
+      final googleAuth = googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
+        throw Exception('Google Re-auth failed securely: No ID Token generated.');
+      }
+
+      final authClient = await googleUser.authorizationClient.authorizeScopes(
+        ['email', 'profile'],
+      );
+      final accessToken = authClient.accessToken;
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      await user.reauthenticateWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Google Re-auth FirebaseAuthException [${e.code}]: ${e.message}');
+      final isStale = e.code == 'invalid-credential' || 
+                      (e.message != null && e.message!.contains('stale'));
+      if (isStale && !isRetry) {
+        debugPrint('⚠️ Stale Google ID token detected during re-auth. Disconnecting and retrying...');
+        try {
+          await GoogleSignIn.instance.disconnect();
+        } catch (discErr) {
+          debugPrint('Error during Google disconnect: $discErr');
+        }
+        await _reauthenticateGoogleMobileWithRetry(user, isRetry: true);
+        return;
+      }
+      rethrow;
+    } catch (e) {
+      debugPrint('Google Re-auth Exception: $e');
+      final isStale = e.toString().contains('invalid-credential') || 
+                      e.toString().contains('stale');
+      if (isStale && !isRetry) {
+        debugPrint('⚠️ Stale Google ID token detected during re-auth (general catch). Disconnecting and retrying...');
+        try {
+          await GoogleSignIn.instance.disconnect();
+        } catch (discErr) {
+          debugPrint('Error during Google disconnect: $discErr');
+        }
+        await _reauthenticateGoogleMobileWithRetry(user, isRetry: true);
+        return;
+      }
+      rethrow;
     }
   }
 
@@ -268,34 +364,8 @@ class AuthService {
       }
 
       if (isGoogleUser) {
-        // Reauthenticate with Google
-        await GoogleSignIn.instance.signOut(); // Force cache clear to ensure fresh picker
-        late final GoogleSignInAccount googleUser;
-        try {
-          googleUser = await GoogleSignIn.instance.authenticate();
-        } catch (e) {
-          debugPrint('Google Re-auth was cancelled by the user: $e');
-          throw Exception('Google re-authentication was cancelled.');
-        }
-
-        final googleAuth = googleUser.authentication;
-        final idToken = googleAuth.idToken;
-
-        if (idToken == null) {
-          throw Exception('Google Re-auth failed securely: No ID Token generated.');
-        }
-
-        final authClient = await googleUser.authorizationClient.authorizeScopes(
-          ['email', 'profile'],
-        );
-        final accessToken = authClient.accessToken;
-
-        final credential = GoogleAuthProvider.credential(
-          idToken: idToken,
-          accessToken: accessToken,
-        );
-
-        await user.reauthenticateWithCredential(credential);
+        // Reauthenticate with Google (using retry helper to handle stale credentials)
+        await _reauthenticateGoogleMobileWithRetry(user);
       } else {
         if (password == null || password.isEmpty) {
           throw Exception('Password is required to delete account.');
@@ -343,17 +413,69 @@ class AuthService {
       // Finally, delete the top-level user document
       await userRef.delete();
 
-      // Clear local Hive cache
-      await Hive.box<LocalUser>(HiveSetup.userBoxName).clear();
+      // Clear all local database/caches/preferences associated with the user
+      await _clearAllLocalUserData(user.uid);
 
       // Delete Firebase Auth user
       await user.delete();
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint('Delete Account Error [${e.code}]: ${e.message}\n$stackTrace');
+      final isStale = e.code == 'invalid-credential' || 
+                      (e.message != null && e.message!.contains('stale'));
+      if (isStale) {
+        throw Exception(
+          "Your phone's date and time are incorrect. Please go to your settings and correct your date and time to continue.",
+        );
+      }
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         throw Exception('Incorrect password.');
       }
       throw Exception(_handleAuthError(e.code));
+    }
+  }
+
+  Future<void> _clearAllLocalUserData(String uid) async {
+    try {
+      debugPrint('🧹 Starting complete local user data cleanup for UID: $uid');
+
+      // 1. Clear local Hive user box
+      await Hive.box<LocalUser>(HiveSetup.userBoxName).clear();
+
+      // 2. Clear user-specific SharedPreferences caches
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith('notes_') ||
+            key.startsWith('cached_purchases_') ||
+            key.startsWith('cached_classroom_') ||
+            key.startsWith('classroom_practice_') ||
+            key.startsWith('tutorial_completed_') ||
+            key == 'cached_ai_messages' ||
+            key == 'favorite_video_ids' ||
+            key == 'read_notice_ids') {
+          await prefs.remove(key);
+          debugPrint('🧹 Cleaned local SharedPreferences key: $key');
+        }
+      }
+    } catch (e) {
+      debugPrint('Error clearing SharedPreferences local data: $e');
+    }
+
+    try {
+      // 3. Clear user-specific/local Hive boxes
+      // Local Exam History Box
+      final examHistoryBox = await Hive.openBox<String>('exam_history_local');
+      await examHistoryBox.clear();
+      await examHistoryBox.close();
+      debugPrint('🧹 Cleaned exam_history_local Hive box.');
+
+      // Bookmarked Questions Box
+      final bookmarkBox = await Hive.openBox<String>('bookmarked_questions');
+      await bookmarkBox.clear();
+      await bookmarkBox.close();
+      debugPrint('🧹 Cleaned bookmarked_questions Hive box.');
+    } catch (e) {
+      debugPrint('Error clearing Hive local data boxes: $e');
     }
   }
 

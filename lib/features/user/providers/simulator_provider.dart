@@ -55,6 +55,7 @@ class SimulatorProvider extends ChangeNotifier {
     required String examType,
     required String institutionId,
     String? sectionId,
+    bool force = false,
   }) async {
     try {
       _isCheckingUpdates = true;
@@ -65,6 +66,7 @@ class SimulatorProvider extends ChangeNotifier {
         examType: examType,
         institutionId: institutionId,
         sectionId: sectionId,
+        force: force,
       );
 
       _isCheckingUpdates = false;
@@ -230,6 +232,7 @@ class SimulatorProvider extends ChangeNotifier {
     required String institutionId,
     // REMOVED: required List<String> subjects,
     String? sectionId,
+    bool force = false,
   }) async {
     try {
       _activationProgress = 0;
@@ -239,13 +242,14 @@ class SimulatorProvider extends ChangeNotifier {
       _safeNotifyListeners();
 
       debugPrint(
-        '⚡ [ACTIVATION] downloadActivationData called: $examType/$institutionId section=$sectionId',
+        '⚡ [ACTIVATION] downloadActivationData called: $examType/$institutionId section=$sectionId force=$force',
       );
 
       await _service.downloadAndCacheAllActivationData(
         examType: examType,
         institutionId: institutionId,
         sectionId: sectionId, // Subjects are now discovered dynamically by the service!
+        force: force,
         onProgress: (current, total) {
           _activationProgress = current;
           _activationTotal = total;
@@ -563,36 +567,97 @@ class SimulatorProvider extends ChangeNotifier {
       for (final subject in rawIds.keys) {
         final List<String> ids = List<String>.from(rawIds[subject] ?? []);
 
-        final yearMap = examConfig['years'] as Map?;
-        final year = yearMap?[subject]?.toString() ?? '2024';
+        // 1. Gather all candidate years to check from the exam config
+        final Set<String> targetYears = {};
+        
+        final shuffleYearsMap = examConfig['shuffleYears'] as Map?;
+        if (shuffleYearsMap != null && shuffleYearsMap[subject] != null) {
+          final list = shuffleYearsMap[subject];
+          if (list is List) {
+            targetYears.addAll(list.map((e) => e.toString()));
+          }
+        }
+        
+        final subjectYearsMap = examConfig['subjectYears'] as Map? ?? 
+            examConfig['years'] as Map?;
+        if (subjectYearsMap != null && subjectYearsMap[subject] != null) {
+          targetYears.add(subjectYearsMap[subject].toString());
+        }
+        
+        if (targetYears.isEmpty) {
+          targetYears.add('2024');
+        }
 
-        final allQuestions = await _service.loadCachedQuestions(
-          examType: examType,
-          institutionId: institutionId,
-          subject: subject,
-          year: year,
-        );
+        // 2. Load questions from all these candidate years
+        final List<QuestionModel> candidateQuestions = [];
+        for (final y in targetYears) {
+          final questions = await _service.loadCachedQuestions(
+            examType: examType,
+            institutionId: institutionId,
+            subject: subject,
+            year: y,
+          );
+          candidateQuestions.addAll(questions);
+        }
 
-        reconstructed[subject] = ids.map((id) {
+        // 3. Reconstruct questions list
+        final List<QuestionModel> subjectQuestionsList = [];
+        for (final id in ids) {
+          QuestionModel? foundQ;
           try {
-            return allQuestions.firstWhere((q) => q.id == id);
-          } catch (e) {
-            return QuestionModel(
-              id: id,
-              examType: examType,
-              subject: subject,
-              year: year,
-              content: [
-                ContentBlockModel(
-                  type: 'text',
-                  value: 'Question data not found in cache.',
-                ),
-              ],
-              options: [],
-              answer: '',
+            foundQ = candidateQuestions.firstWhere((q) => q.id == id);
+          } catch (_) {
+            // If not found in the initial candidate years, search through other cached years
+            try {
+              final allAvailableYears = await _service.getCachedAvailableYears(
+                examType,
+                institutionId,
+                subject,
+                sectionId: examConfig['sectionId']?.toString(),
+              ) ?? [];
+              
+              for (final alternativeYear in allAvailableYears) {
+                if (targetYears.contains(alternativeYear)) continue;
+                final altQuestions = await _service.loadCachedQuestions(
+                  examType: examType,
+                  institutionId: institutionId,
+                  subject: subject,
+                  year: alternativeYear,
+                );
+                try {
+                  foundQ = altQuestions.firstWhere((q) => q.id == id);
+                  // Save it to candidates pool for future lookups of other questions in this subject
+                  candidateQuestions.addAll(altQuestions);
+                  break;
+                } catch (_) {}
+              }
+            } catch (_) {}
+          }
+
+          if (foundQ != null) {
+            subjectQuestionsList.add(foundQ);
+          } else {
+            // Dynamic fallback year for reporting/display
+            final fallbackYear = targetYears.isNotEmpty ? targetYears.first : '2024';
+            subjectQuestionsList.add(
+              QuestionModel(
+                id: id,
+                examType: examType,
+                subject: subject,
+                year: fallbackYear,
+                content: [
+                  ContentBlockModel(
+                    type: 'text',
+                    value: 'Question data not found in cache.',
+                  ),
+                ],
+                options: [],
+                answer: '',
+              ),
             );
           }
-        }).toList();
+        }
+        reconstructed[subject] = subjectQuestionsList;
       }
 
       return reconstructed;

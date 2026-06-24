@@ -32,6 +32,7 @@ class SimulatorScreen extends StatefulWidget {
 class _SimulatorScreenState extends State<SimulatorScreen>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final TTSService _ttsService = TTSService();
+  final ScrollController _questionScrollController = ScrollController();
 
   late Map<String, dynamic> _examConfig;
 
@@ -81,6 +82,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
     _globalTimer?.cancel();
     _ttsService.stop();
     _tabController?.dispose();
+    _questionScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -343,6 +345,13 @@ class _SimulatorScreenState extends State<SimulatorScreen>
         _currentQuestionInSubject = 0;
       });
       _ttsService.stop();
+      
+      // Reset scroll offset to 0 for the new subject
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_questionScrollController.hasClients) {
+          _questionScrollController.jumpTo(0.0);
+        }
+      });
     }
   }
 
@@ -549,6 +558,39 @@ class _SimulatorScreenState extends State<SimulatorScreen>
   void _navigateToQuestion(int index) {
     _ttsService.stop();
     setState(() => _currentQuestionInSubject = index);
+    
+    // Auto-scroll the active question button into view after layout completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_questionScrollController.hasClients) {
+        final double currentOffset = _questionScrollController.offset;
+        final double viewportWidth = _questionScrollController.position.viewportDimension;
+        final double itemStart = index * 42.0; // button width (34) + spacing (8)
+        final double itemEnd = itemStart + 34.0;
+        
+        double targetOffset = currentOffset;
+        
+        if (viewportWidth > 0) {
+          // If the item is near/beyond the right edge of the viewport (or is the last visible one)
+          if (itemEnd > currentOffset + viewportWidth - 42.0) {
+            // Scroll so the item is at the start (left edge) of the viewport
+            targetOffset = itemStart;
+          } 
+          // If the item is before the left edge of the viewport
+          else if (itemStart < currentOffset) {
+            // Scroll so the item is at the start (left edge) of the viewport
+            targetOffset = itemStart;
+          }
+        }
+        
+        if (targetOffset != currentOffset) {
+          _questionScrollController.animateTo(
+            targetOffset.clamp(0.0, _questionScrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      }
+    });
   }
 
   void _showCalculator() {
@@ -1621,8 +1663,8 @@ class _SimulatorScreenState extends State<SimulatorScreen>
     int safeIndex,
   ) {
     return Container(
-      constraints: const BoxConstraints(maxHeight: 125),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.grey.shade50,
         border: Border(
@@ -1632,111 +1674,117 @@ class _SimulatorScreenState extends State<SimulatorScreen>
           ),
         ),
       ),
+      alignment: Alignment.center,
       child: SingleChildScrollView(
+        controller: _questionScrollController,
+        scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        child: Row(
           children: List.generate(questions.length, (index) {
             final isAnswered = answers.containsKey(index);
             final isCurrent = index == safeIndex;
             final isFlagged = flags.contains(index);
 
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                GestureDetector(
-                  onTap: () => _navigateToQuestion(index),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      gradient: isCurrent
-                          ? const LinearGradient(
-                              colors: [
-                                AppColors.primary,
-                                Color(0xFF6B4EE6),
-                              ],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            )
-                          : null,
-                      color: !isCurrent
-                          ? (isAnswered
-                              ? Colors.green.withValues(alpha: 0.1)
-                              : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white))
-                          : null,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isCurrent
-                            ? Colors.transparent
-                            : (isAnswered
-                                ? Colors.green.withValues(alpha: 0.4)
-                                : (isDark ? AppColors.dividerDark : Colors.grey.shade300)),
-                        width: isCurrent ? 0 : 1.2,
-                      ),
-                      boxShadow: isCurrent
-                          ? [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.35),
-                                blurRadius: 8,
-                                offset: const Offset(0, 3),
-                              ),
-                            ]
-                          : (isAnswered
-                              ? []
-                              : [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                                    blurRadius: 2,
-                                    offset: const Offset(0, 1),
-                                  ),
-                                ]),
-                    ),
-                    child: Center(
-                      child: Text(
-                        '${index + 1}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                          color: isCurrent
-                              ? Colors.white
-                              : (isAnswered
-                                  ? Colors.green
-                                  : (isDark ? Colors.white60 : Colors.grey.shade700)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                if (isFlagged)
-                  Positioned(
-                    top: -4,
-                    right: -4,
-                    child: Container(
-                      padding: const EdgeInsets.all(1.5),
+            return Padding(
+              padding: EdgeInsets.only(
+                right: index == questions.length - 1 ? 0.0 : 8.0,
+              ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  GestureDetector(
+                    onTap: () => _navigateToQuestion(index),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
-                        color: isDark ? AppColors.surfaceDark : Colors.white,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 2,
-                          ),
-                        ],
+                        gradient: isCurrent
+                            ? const LinearGradient(
+                                colors: [
+                                  AppColors.primary,
+                                  Color(0xFF6B4EE6),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              )
+                            : null,
+                        color: !isCurrent
+                            ? (isAnswered
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : (isDark ? Colors.white.withValues(alpha: 0.03) : Colors.white))
+                            : null,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isCurrent
+                              ? Colors.transparent
+                              : (isAnswered
+                                  ? Colors.green.withValues(alpha: 0.4)
+                                  : (isDark ? AppColors.dividerDark : Colors.grey.shade300)),
+                          width: isCurrent ? 0 : 1.2,
+                        ),
+                        boxShadow: isCurrent
+                            ? [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.35),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : (isAnswered
+                                ? []
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ]),
                       ),
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            color: isCurrent
+                                ? Colors.white
+                                : (isAnswered
+                                    ? Colors.green
+                                    : (isDark ? Colors.white60 : Colors.grey.shade700)),
+                          ),
                         ),
                       ),
                     ),
                   ),
-              ],
+                  if (isFlagged)
+                    Positioned(
+                      top: -2,
+                      right: -2,
+                      child: Container(
+                        padding: const EdgeInsets.all(1.5),
+                        decoration: BoxDecoration(
+                          color: isDark ? AppColors.surfaceDark : Colors.white,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.1),
+                              blurRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           }),
         ),

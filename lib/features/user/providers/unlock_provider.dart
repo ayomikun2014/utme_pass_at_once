@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../../auth/providers/auth_provider.dart';
-import '../../user/services/paystack_service.dart';
 import '../services/unlock_service.dart';
 import '../../../core/services/network_service.dart';
 
 
 class UnlockProvider extends ChangeNotifier {
   final UnlockService _service = UnlockService();
-  final PaystackService _paystackService = PaystackService.instance;
 
   bool _isLoading = false;
   String _errorMessage = '';
@@ -107,6 +105,11 @@ class UnlockProvider extends ChangeNotifier {
 
     _isActivationComplete = false;
 
+    notifyListeners();
+  }
+
+  void setActivationComplete(bool value) {
+    _isActivationComplete = value;
     notifyListeners();
   }
 
@@ -348,18 +351,7 @@ class UnlockProvider extends ChangeNotifier {
         selectedSectionName: isPostUtme ? _selectedSectionName : null,
       );
 
-      try {
-        await _paystackService.recordVoucherUsage(
-          voucherCode: _voucherCode,
-          uid: currentUser.uid,
-          email: currentUser.email,
-          userName: currentUser.displayName,
-        );
-      } catch (e) {
-        debugPrint('Record voucher usage warning: $e');
-      }
 
-      _isActivationComplete = true;
       _isLoading = false;
       notifyListeners();
 

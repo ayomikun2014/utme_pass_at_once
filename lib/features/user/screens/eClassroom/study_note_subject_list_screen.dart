@@ -35,8 +35,7 @@ class _StudyNoteSubjectListScreenState extends State<StudyNoteSubjectListScreen>
   int _currentPage = 0;
 
   final List<String> _bannerImages = [
-    'assets/images/eClassroom_subject_banner.webp',
-    'assets/images/eClassroom_topic_banner.webp',
+    'assets/images/eclassroom_banner.webp',
   ];
 
   @override
@@ -78,6 +77,7 @@ class _StudyNoteSubjectListScreenState extends State<StudyNoteSubjectListScreen>
   }
 
   void _startBannerTimer() {
+    if (_bannerImages.length <= 1) return;
     _bannerTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (_pageController.hasClients) {
         setState(() {

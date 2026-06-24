@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/utils/bg.dart';
@@ -21,7 +23,7 @@ class UpdateScreen extends StatefulWidget {
 
 class _UpdateScreenState extends State<UpdateScreen> {
   String _deviceId = '--';
-  String _lastUpdated = '--';
+  String _lastUpdated = 'Not synced yet';
   bool _isUpToDate = false;
 
   @override
@@ -36,7 +38,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
       setState(() {
         _deviceId = authProvider.currentDeviceId;
       });
-      // You can fetch the actual last updated date from SharedPreferences or Hive here later
+      // Retrieve last updated date from local storage or set initial mock state
     });
   }
 
@@ -95,7 +97,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
     try {
       bool updatesFound = false;
 
-      // 2. Iterate through all active exam types to check for updates
+      // 2. Iterate through all active exam types to check for updates (force checks from server)
       final activeExams = ['post_utme', 'waec', 'jamb', 'neco'];
 
       for (final exam in activeExams) {
@@ -108,11 +110,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 ? center.split('_').first
                 : center;
 
-            // Call the Smart Merge check we built in SimulatorService
+            // Call the Smart Merge check (force = true to check server updates)
             final updateInfo = await simProvider.checkForUpdates(
               examType: exam,
               institutionId: baseInstitutionId,
               sectionId: section?['id'],
+              force: true,
             );
 
             if (updateInfo['updatesAvailable'] == true) {
@@ -121,11 +124,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
               if (!mounted) return;
               Navigator.pop(context); // Close checking dialog
 
-              // 3. Download the delta updates
+              // 3. Download the delta updates with force: true to overwrite modifications
               final downloadFuture = simProvider.downloadActivationData(
                 examType: exam,
                 institutionId: baseInstitutionId,
                 sectionId: section?['id'],
+                force: true,
               );
 
               await showModalBottomSheet(
@@ -136,6 +140,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 backgroundColor: Colors.transparent,
                 builder: (sheetContext) => ActivationBottomSheet(
                   task: () => downloadFuture,
+                  isUpdateFlow: true,
                   onComplete: () {
                     // Sheet popped itself upon success confirmation
                   },
@@ -149,7 +154,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
       if (!mounted) return;
 
-      // If the checking dialog is still open (no updates found), close it
+      // If checking dialog is still open (no updates found), close it
       if (!updatesFound) {
         Navigator.pop(context);
         CustomToast.show(context, 'All questions are already up-to-date!');
@@ -182,16 +187,26 @@ class _UpdateScreenState extends State<UpdateScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final settingsProvider = context.watch<SettingsProvider>();
+    final authProvider = context.watch<AuthProvider>();
+    final user = authProvider.currentUser;
+    final isFreeUser = user == null || !user.isPremiumOnDevice(_deviceId);
+    
+    final installed = settingsProvider.installedVersion;
+    final latest = settingsProvider.latestAppVersion;
+    final appUpdateAvailable = installed != latest;
+    final storeUrl = Platform.isIOS ? settingsProvider.appStoreUrl : settingsProvider.playStoreUrl;
 
     return Scaffold(
       body: Stack(
         children: [
           const BlobBackground(),
           CustomScrollView(
+            physics: const BouncingScrollPhysics(),
             slivers: [
               const CustomAppBar(
-                title: 'Updates',
-                subtitle: 'Keep your offline questions up to date.',
+                title: 'App Updates',
+                subtitle: 'Manage and sync your application state.',
                 isLeading: true,
                 centerTitle: true,
               ),
@@ -201,64 +216,19 @@ class _UpdateScreenState extends State<UpdateScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(height: 10),
-
-                      // VERSION TEXT
-                      Builder(
-                        builder: (context) {
-                          final settingsProvider = context.watch<SettingsProvider>();
-                          final installed = settingsProvider.installedVersion;
-                          final latest = settingsProvider.latestAppVersion;
-
-                          return Column(
-                            children: [
-                              Center(
-                                child: Text(
-                                  '$installed v',
-                                  style: TextStyle(
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.w900,
-                                    color: theme.colorScheme.primary,
-                                    letterSpacing: 2.0,
-                                  ),
-                                ),
-                              ),
-                              if (installed != latest) ...[
-                                const SizedBox(height: 8),
-                                Center(
-                                  child: Text(
-                                    'Latest: $latest',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // MAIN UPDATE CARD
-                      _buildUpdateCard(theme, isDark),
-
+                      // Circular sync status illustration
+                      _buildSyncStatusIndicator(appUpdateAvailable, isDark, theme),
+                      
+                      // App version card
+                      _buildAppUpdateCard(context, installed, latest, storeUrl, isDark, theme),
                       const SizedBox(height: 16),
 
-                      // FOOTER
-                      Center(
-                        child: Text(
-                          'Ensure you have a stable internet connection to update questions',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                      // Questions database card
+                      _buildDatabaseSyncCard(context, isFreeUser, isDark, theme),
+                      const SizedBox(height: 16),
+
+                      // Device activation info card
+                      _buildDeviceInfoCard(context, isDark, theme),
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -271,107 +241,453 @@ class _UpdateScreenState extends State<UpdateScreen> {
     );
   }
 
-  Widget _buildUpdateCard(ThemeData theme, bool isDark) {
+  Widget _buildSyncStatusIndicator(bool appUpdateAvailable, bool isDark, ThemeData theme) {
+    final statusColor = appUpdateAvailable ? Colors.orange : Colors.green;
+    return Column(
+      children: [
+        const SizedBox(height: 10),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            // Outer glowing ring
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor.withValues(alpha: 0.05),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.1),
+                  width: 4,
+                ),
+              ),
+            ),
+            // Middle pulsing ring
+            Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor.withValues(alpha: 0.08),
+                border: Border.all(
+                  color: statusColor.withValues(alpha: 0.15),
+                  width: 3,
+                ),
+              ),
+            ),
+            // Inner solid circle with gradient
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: appUpdateAvailable
+                      ? [Colors.orange.shade400, Colors.deepOrange.shade600]
+                      : [Colors.green.shade400, Colors.teal.shade600],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: statusColor.withValues(alpha: 0.25),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(
+                appUpdateAvailable ? Icons.system_update_alt_rounded : Icons.cloud_done_rounded,
+                color: Colors.white,
+                size: 32,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Text(
+          appUpdateAvailable ? 'Updates Available' : 'Your App is Up to Date',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            letterSpacing: -0.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            appUpdateAvailable
+                ? 'A newer version of the app is available on the store.'
+                : 'Everything is synced and ready for offline use.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              fontSize: 13,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildAppUpdateCard(BuildContext context, String installed, String latest, String storeUrl, bool isDark, ThemeData theme) {
+    final hasUpdate = installed != latest;
     final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
     final borderColor = isDark
         ? AppColors.dividerDark
         : theme.colorScheme.onSurface.withValues(alpha: 0.08);
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(color: borderColor),
         boxShadow: [
           if (!isDark)
             BoxShadow(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
-              blurRadius: 10,
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (hasUpdate ? Colors.orange : theme.colorScheme.primary).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.phone_android_rounded,
+                  color: hasUpdate ? Colors.orange : theme.colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'App Version',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hasUpdate ? 'New version available' : 'You are on the latest version',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: hasUpdate ? Colors.orange.shade700 : Colors.green.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: (hasUpdate ? Colors.orange : Colors.green).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  hasUpdate ? 'UPDATE' : 'LATEST',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: hasUpdate ? Colors.orange.shade800 : Colors.green.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Divider(color: borderColor, height: 1),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Installed',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'v$installed',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Latest Release',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'v$latest',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () async {
+              if (storeUrl.isNotEmpty) {
+                final Uri url = Uri.parse(storeUrl);
+                if (await canLaunchUrl(url)) {
+                  await launchUrl(
+                    url,
+                    mode: LaunchMode.externalApplication,
+                  );
+                } else {
+                  if (context.mounted) {
+                    CustomToast.show(context, 'Could not open store link.', isError: true);
+                  }
+                }
+              } else {
+                CustomToast.show(context, 'Store link not configured.', isError: true);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              hasUpdate ? 'Update App on Play Store' : 'Open Play Store',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDatabaseSyncCard(BuildContext context, bool isFreeUser, bool isDark, ThemeData theme) {
+    final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
+    final borderColor = isDark
+        ? AppColors.dividerDark
+        : theme.colorScheme.onSurface.withValues(alpha: 0.08);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (isFreeUser ? Colors.red : Colors.blue).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isFreeUser ? Icons.lock_outline_rounded : Icons.storage_rounded,
+                  color: isFreeUser ? Colors.red : Colors.blue,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Questions Database',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isFreeUser 
+                          ? 'Unlock premium to sync latest questions offline'
+                          : (_isUpToDate ? 'Offline content is up-to-date' : 'Sync pending check'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isFreeUser
+                            ? Colors.red.shade700
+                            : (_isUpToDate ? Colors.green.shade700 : Colors.blue.shade700),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Divider(color: borderColor, height: 1),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Last Sync Status',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isFreeUser ? 'Inactive' : _lastUpdated,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Consumer<SimulatorProvider>(
+            builder: (context, simProvider, child) {
+              final isChecking = simProvider.isCheckingUpdates;
+              return ElevatedButton.icon(
+                onPressed: isChecking 
+                    ? null 
+                    : () {
+                        if (isFreeUser) {
+                          Navigator.pushNamed(context, '/store');
+                        } else {
+                          _handleUpdateQuestions();
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isFreeUser
+                      ? Colors.red
+                      : theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                icon: isFreeUser
+                    ? const Icon(Icons.lock_open_rounded, size: 18)
+                    : (isChecking 
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 18)),
+                label: Text(
+                  isFreeUser 
+                      ? 'Unlock Premium to Sync'
+                      : (isChecking ? 'Checking Updates...' : 'Check & Sync Questions'),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              );
+            }
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeviceInfoCard(BuildContext context, bool isDark, ThemeData theme) {
+    final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
+    final borderColor = isDark
+        ? AppColors.dividerDark
+        : theme.colorScheme.onSurface.withValues(alpha: 0.08);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header
-          const Text(
-            'Update Questions',
-            style: TextStyle(
-              fontSize: 18,
+          Text(
+            'Offline Activation Info',
+            style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
-            'Click the button below to update new questions into your app.',
+            'To access mock exams offline without internet, ensure you fully download activation packages first. Your offline database is unique to this device.',
             style: TextStyle(
-              fontSize: 14,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               height: 1.4,
             ),
           ),
           const SizedBox(height: 20),
-
-          // Update Button
-          Consumer<SimulatorProvider>(
-              builder: (context, simProvider, child) {
-                return ElevatedButton.icon(
-                  onPressed: simProvider.isCheckingUpdates ? null : _handleUpdateQuestions,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark ? theme.colorScheme.primary : Colors.black,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  label: const Text(
-                    'Update Questions',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  icon: const Icon(Icons.sync_rounded, size: 20),
-                );
-              }
-          ),
-
-          const SizedBox(height: 24),
-
-          // Last Updated Info
-          const Text(
-            'Last updated',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
           Text(
-            _lastUpdated,
-            style: TextStyle(
-              fontSize: 14,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _isUpToDate ? 'All questions are up-to-date.' : 'All questions are not up-to-date.',
-            style: TextStyle(
-              fontSize: 14,
-              color: _isUpToDate ? Colors.green : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-
-          const SizedBox(height: 32),
-
-          // Device ID Section
-          const Text(
             'Device ID',
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 8),
@@ -380,9 +696,10 @@ class _UpdateScreenState extends State<UpdateScreen> {
               Expanded(
                 child: Text(
                   _deviceId,
-                  style: const TextStyle(
-                    fontSize: 13,
+                  style: TextStyle(
+                    fontSize: 12,
                     fontFamily: 'monospace',
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -391,12 +708,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
               const SizedBox(width: 12),
               InkWell(
                 onTap: _copyDeviceId,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                   ),
                   child: const Row(
@@ -406,10 +723,10 @@ class _UpdateScreenState extends State<UpdateScreen> {
                         style: TextStyle(
                           color: Colors.red,
                           fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                       ),
-                      Icon(Icons.copy_rounded, size: 14, color: Colors.red),
+                      Icon(Icons.copy_rounded, size: 12, color: Colors.red),
                     ],
                   ),
                 ),

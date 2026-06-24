@@ -42,10 +42,11 @@ final List<GridCardModel> homeFeatureList = [
     route: '/ai_chat',
   ),
   GridCardModel(
-    title: 'News',
-    icon: Icons.newspaper_rounded,
+    title: 'Announcements',
+    icon: Icons.campaign_outlined,
     baseColor: AppColors.dynamicColors[3], // Amber
-    route: '/news',
+    route: '/announcements',
+    requiresNetwork: true,
   ),
 ];
 
@@ -58,12 +59,6 @@ final List<GridCardModel> moreFeatureList = [
     route: '/my_account',
   ),
   GridCardModel(
-    title: 'News',
-    icon: Icons.newspaper_rounded,
-    baseColor: AppColors.dynamicColors[3], // Amber
-    route: '/news',
-  ),
-  GridCardModel(
     title: 'Store',
     icon: Icons.storefront_outlined,
     baseColor: AppColors.dynamicColors[4], // Purple
@@ -74,6 +69,13 @@ final List<GridCardModel> moreFeatureList = [
     icon: Icons.settings_outlined,
     baseColor: AppColors.dynamicColors[1], // Red
     route: '/settings',
+  ),
+  GridCardModel(
+    title: 'Announcements',
+    icon: Icons.campaign_outlined,
+    baseColor: AppColors.dynamicColors[2], // Coral
+    route: '/announcements',
+    requiresNetwork: true,
   ),
 ];
 

@@ -34,7 +34,6 @@ class _EClassroomCenterCategoriesScreenState extends State<EClassroomCenterCateg
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final notificationProvider = context.watch<NotificationProvider>();
     final unreadNotifs = notificationProvider.notifications.where((n) => !n.isRead).toList();
 
@@ -182,7 +181,7 @@ class _EClassroomCenterCategoriesScreenState extends State<EClassroomCenterCateg
                           fit: StackFit.expand,
                           children: [
                             Image.asset(
-                              'assets/images/eClassroom_topic_banner.webp',
+                              'assets/images/eclassroom_banner.webp',
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
                                   const CustomFallbackImage(

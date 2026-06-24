@@ -141,8 +141,15 @@ class About extends StatelessWidget {
                             _buildSupportRow(
                               context,
                               Icons.email_outlined,
-                              'Support Email',
-                              'taiwoprints999@gmail.com',
+                              'Developer Email',
+                              'ogunfolajinf1@gmail.com',
+                            ),
+                            const SizedBox(height: 10),
+                            _buildSupportRow(
+                              context,
+                              Icons.phone_outlined,
+                              'Developer Phone',
+                              '08113858369',
                             ),
                             const SizedBox(height: 10),
                             _buildSupportRow(

@@ -274,13 +274,14 @@ class SimulatorService {
     required String institutionId,
     // REMOVED: required List<String> subjects, (We fetch dynamically now)
     String? sectionId,
+    bool force = false,
     required void Function(int current, int total) onProgress,
   }) async {
     final normalized = examType.toLowerCase().trim();
     final baseInstitutionId = _getBaseInstitutionId(institutionId);
 
     debugPrint(
-      '⚡ [ACTIVATION] Starting dynamic data download for $normalized/$baseInstitutionId section=$sectionId',
+      '⚡ [ACTIVATION] Starting dynamic data download for $normalized/$baseInstitutionId section=$sectionId force=$force',
     );
 
     int currentStep = 0;
@@ -362,7 +363,8 @@ class SimulatorService {
       for (final year in years) {
         // --- NEW: RESUME CAPABILITY ---
         // Before downloading, check if this specific year is already perfectly cached!
-        final isAlreadyCached = await areQuestionsCached(
+        // Bypass if force is true.
+        final isAlreadyCached = force ? false : await areQuestionsCached(
           examType: normalized,
           institutionId: baseInstitutionId,
           year: year,
@@ -378,7 +380,7 @@ class SimulatorService {
         // ------------------------------
 
         debugPrint(
-          '⚡ [ACTIVATION] Downloading questions: $subject/$year...',
+          '⚡ [ACTIVATION] Downloading questions: $subject/$year (force=$force)...',
         );
 
         try {
@@ -387,6 +389,7 @@ class SimulatorService {
             institutionId: baseInstitutionId,
             year: year,
             subject: subject,
+            force: force,
           );
         } catch (e) {
           debugPrint(
@@ -468,6 +471,7 @@ class SimulatorService {
     required String examType,
     required String institutionId,
     String? sectionId,
+    bool force = false,
   }) async {
     final normalized = examType.toLowerCase().trim();
     final baseInstitutionId = _getBaseInstitutionId(institutionId);
@@ -477,7 +481,7 @@ class SimulatorService {
     int removedSubjectsCount = 0; // <--- NEW: Track deletions
 
     // 1. Fetch Latest Subjects from Firestore
-    final allOnlineSubjects = await getAvailableSubjects(normalized, baseInstitutionId);
+    final allOnlineSubjects = await getAvailableSubjects(normalized, baseInstitutionId, force: force);
     final onlineSubjectsToCheck = normalized == 'post_utme' && sectionId != null && sectionId.trim().isNotEmpty
         ? allOnlineSubjects.where((s) {
       final raw = s.toMap();
@@ -506,7 +510,7 @@ class SimulatorService {
         newSubjectsCount++;
       }
 
-      final onlineYears = await getAvailableYears(normalized, baseInstitutionId, subject);
+      final onlineYears = await getAvailableYears(normalized, baseInstitutionId, subject, force: force);
       final localYears = await getCachedAvailableYears(normalized, baseInstitutionId, subject, sectionId: sectionId) ?? [];
 
       final localYearsSet = localYears.toSet();
@@ -523,6 +527,62 @@ class SimulatorService {
           );
           if (!isCached) {
             newYearsCount++;
+          } else if (force) {
+            // Check if the server content has changed
+            try {
+              final docRef = _firestore
+                  .collection('questionBank')
+                  .doc(normalized)
+                  .collection('institutions')
+                  .doc(baseInstitutionId)
+                  .collection('subjects')
+                  .doc(_normalizeSubjectId(subject))
+                  .collection('years')
+                  .doc(year);
+              
+              final docSnapshot = await docRef.get(const GetOptions(source: Source.server));
+              if (docSnapshot.exists) {
+                final yearData = docSnapshot.data() ?? {};
+                final yearModel = YearModel.fromFirestore(yearData, year);
+                
+                final cachedQuestions = await loadCachedQuestions(
+                  examType: normalized,
+                  institutionId: baseInstitutionId,
+                  subject: subject,
+                  year: year,
+                );
+
+                if (cachedQuestions.length != yearModel.rawQuestions.length) {
+                  newYearsCount++;
+                } else {
+                  final serverQuestions = yearModel.rawQuestions.map((qMap) {
+                    return QuestionModel.fromJson(
+                      qMap,
+                      examType: normalized,
+                      institutionId: baseInstitutionId,
+                      subjectId: _normalizeSubjectId(subject),
+                      year: int.tryParse(year) ?? 0,
+                    );
+                  }).toList();
+
+                  final serverJson = json.encode(serverQuestions.map((q) => q.toMap()).toList());
+                  final box = await Hive.openBox<String>(_boxName);
+                  final cacheKey = _buildQuestionCacheKey(
+                    examType: normalized,
+                    institutionId: baseInstitutionId,
+                    year: year,
+                    subject: subject,
+                  );
+                  final cachedJson = box.get(cacheKey);
+
+                  if (cachedJson != serverJson) {
+                    newYearsCount++;
+                  }
+                }
+              }
+            } catch (e) {
+              debugPrint('Error checking year $year for update: $e');
+            }
           }
         }
       }
@@ -578,8 +638,9 @@ class SimulatorService {
 
   Future<List<SubjectModel>> getAvailableSubjects(
       String examType,
-      String institutionId,
-      ) async {
+      String institutionId, {
+      bool force = false,
+      }) async {
     try {
       final normalized = examType.toLowerCase().trim();
       final baseInstitutionId = _getBaseInstitutionId(institutionId);
@@ -590,7 +651,7 @@ class SimulatorService {
           .collection('institutions')
           .doc(baseInstitutionId)
           .collection('subjects')
-          .get();
+          .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
 
       if (snapshot.docs.isNotEmpty) {
         return snapshot.docs.map((doc) {
@@ -608,8 +669,9 @@ class SimulatorService {
   Future<List<String>> getAvailableYears(
       String examType,
       String institutionId,
-      String subject,
-      ) async {
+      String subject, {
+      bool force = false,
+      }) async {
     try {
       final normalized = examType.toLowerCase().trim();
       final baseInstitutionId = _getBaseInstitutionId(institutionId);
@@ -627,7 +689,7 @@ class SimulatorService {
           .doc(baseInstitutionId)
           .collection('subjects')
           .doc(subjectId)
-          .get(const GetOptions(source: Source.serverAndCache));
+          .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
 
       if (doc.exists) {
         final data = doc.data();
@@ -790,6 +852,7 @@ class SimulatorService {
     required String institutionId,
     required String year,
     required String subject,
+    bool force = false,
   }) async {
     final normalized = examType.toLowerCase().trim();
     final baseInstitutionId = _getBaseInstitutionId(institutionId);
@@ -804,7 +867,7 @@ class SimulatorService {
 
     final box = await Hive.openBox<String>(_boxName);
 
-    if (box.containsKey(cacheKey)) {
+    if (!force && box.containsKey(cacheKey)) {
       final existingData = box.get(cacheKey);
 
       if (existingData != null) {
@@ -833,9 +896,11 @@ class SimulatorService {
         .collection('years')
         .doc(year);
 
-    debugPrint('Fetching year document from: ${docRef.path}');
+    debugPrint('Fetching year document from (force=$force): ${docRef.path}');
 
-    final docSnapshot = await docRef.get();
+    final docSnapshot = force 
+        ? await docRef.get(const GetOptions(source: Source.server))
+        : await docRef.get();
 
     if (!docSnapshot.exists) {
       debugPrint('WARNING: No year document found at path: ${docRef.path}');
@@ -865,6 +930,17 @@ class SimulatorService {
         year: int.tryParse(year) ?? 0,
       );
     }).toList();
+
+    final jsonList = questions.map((q) => q.toMap()).toList();
+    final newJsonString = json.encode(jsonList);
+
+    if (box.containsKey(cacheKey)) {
+      final existingData = box.get(cacheKey);
+      if (existingData == newJsonString) {
+        debugPrint('✅ Questions are identical, skipping cache write and image download for $cacheKey');
+        return;
+      }
+    }
 
     if (yearModel.hasImage && !kIsWeb) {
       final List<Future<dynamic>> imageDownloads = [];
@@ -915,11 +991,9 @@ class SimulatorService {
       }
     }
 
-    final jsonList = questions.map((q) => q.toMap()).toList();
+    await box.put(cacheKey, newJsonString);
 
-    await box.put(cacheKey, json.encode(jsonList));
-
-    debugPrint('✅ Cached ${questions.length} questions for $cacheKey');
+    debugPrint('✅ Cached and updated ${questions.length} questions for $cacheKey');
   }
 
   Future<List<QuestionModel>> loadCachedQuestions({

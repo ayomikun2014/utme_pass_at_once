@@ -10,6 +10,7 @@ class ActivationBottomSheet extends StatefulWidget {
   final Future<bool> Function() task;
   final VoidCallback onComplete;
   final bool isUnlockFlow;
+  final bool isUpdateFlow;
   final String? errorMessage;
 
   const ActivationBottomSheet({
@@ -17,6 +18,7 @@ class ActivationBottomSheet extends StatefulWidget {
     required this.task,
     required this.onComplete,
     this.isUnlockFlow = false,
+    this.isUpdateFlow = false,
     this.errorMessage,
   });
 
@@ -44,11 +46,21 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
     'Organizing your subjects... 🎯',
   ];
 
+  static const List<String> _updateQuotes = [
+    'Fetching latest questions from the cloud... 🌐',
+    'Analyzing syllabus revisions... 📚',
+    'Merging questions database... ⚙️',
+    'Updating question answers and explanations... 💡',
+    'Almost ready... success awaits! 🚀',
+  ];
+
   @override
   void initState() {
     super.initState();
     _stage = widget.isUnlockFlow ? 0 : 1;
-    _startTask();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startTask();
+    });
   }
 
   @override
@@ -58,11 +70,12 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
   }
 
   void _startQuoteTimer() {
+    final quotesList = widget.isUpdateFlow ? _updateQuotes : _quotes;
     _quoteTimer?.cancel();
     _quoteTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mounted) {
         setState(() {
-          _quoteIndex = (_quoteIndex + 1) % _quotes.length;
+          _quoteIndex = (_quoteIndex + 1) % quotesList.length;
         });
       }
     });
@@ -167,10 +180,10 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
 
               Text(
                 _isFinished
-                    ? 'Activation Complete! 🎉'
+                    ? (widget.isUpdateFlow ? 'Update Complete! 🎉' : 'Activation Complete! 🎉')
                     : _hasFailed
-                        ? 'Activation Failed'
-                        : 'Activation in progress...',
+                        ? (widget.isUpdateFlow ? 'Update Failed' : 'Activation Failed')
+                        : (widget.isUpdateFlow ? 'Updating in progress...' : 'Activation in progress...'),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
@@ -235,7 +248,7 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 500),
                   child: Text(
-                    _quotes[_quoteIndex],
+                    widget.isUpdateFlow ? _updateQuotes[_quoteIndex] : _quotes[_quoteIndex],
                     key: ValueKey<int>(_quoteIndex),
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -287,8 +300,10 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
 
               if (_isFinished) ...[
                 const SizedBox(height: 12),
-                Text(
-                  'Your offline premium package is activated! All syllabus resources, mock questions, and centers have been successfully downloaded.',
+                 Text(
+                  widget.isUpdateFlow
+                      ? 'Your offline questions database has been updated successfully! All question modifications have been successfully downloaded.'
+                      : 'Your offline premium package is activated! All syllabus resources, mock questions, and centers have been successfully downloaded.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
@@ -314,9 +329,9 @@ class ActivationBottomSheetState extends State<ActivationBottomSheet> {
                       ),
                     ),
                     icon: const Icon(Icons.check_rounded, size: 18),
-                    label: const Text(
-                      'Okay, Let\'s Study! 🚀',
-                      style: TextStyle(
+                    label: Text(
+                      widget.isUpdateFlow ? 'Back to Settings' : 'Okay, Let\'s Study! 🚀',
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),

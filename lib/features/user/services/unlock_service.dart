@@ -257,7 +257,26 @@ class UnlockService {
       }
 
       // ------------------------------------------------------------------
-      // STEP 3: Apply the updates securely within the transaction
+      // STEP 3: Fetch all required transaction reads before any writes
+      // ------------------------------------------------------------------
+      final String? paymentReference = voucherData['paymentReference'] as String?;
+      DocumentSnapshot<Map<String, dynamic>>? txDoc;
+      bool isOwnPurchase = false;
+
+      if (paymentReference != null && paymentReference.isNotEmpty) {
+        txDoc = await transaction.get(
+          _firestore.collection('payment_transactions').doc(paymentReference),
+        );
+        if (txDoc.exists) {
+          final txData = txDoc.data()!;
+          if (txData['uid'] == userId) {
+            isOwnPurchase = true;
+          }
+        }
+      }
+
+      // ------------------------------------------------------------------
+      // STEP 4: Apply the updates securely within the transaction (writes)
       // ------------------------------------------------------------------
       // Mark voucher as used
       transaction.update(voucherRef, {
@@ -268,24 +287,30 @@ class UnlockService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Always create a new used transaction record to represent the student's voucher redemption.
-      // This tracks code usage and registers the admin/sub-admin who sold or generated the code,
-      // while keeping the sub-admin's bulk purchase transaction record cleanly in 'completed' status.
-      final String? paymentReference = voucherData['paymentReference'] as String?;
-      final redemptionRef = _firestore.collection('payment_transactions').doc();
-      transaction.set(redemptionRef, {
-        'uid': userId,
-        'examType': voucherExamType,
-        'amount': voucherData['price'] ?? 0,
-        'paymentMethod': 'voucher_redeemed',
-        'status': 'used',
-        'voucherCode': voucherCode,
-        'subAdminUid': createdBySubAdmin ?? voucherData['generatedByAdminUid'] ?? voucherData['adminId'],
-        if (paymentReference != null && paymentReference.isNotEmpty)
-          'parentPaymentReference': paymentReference,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      if (isOwnPurchase && txDoc != null) {
+        transaction.update(txDoc.reference, {
+          'status': 'used',
+          'voucherCode': voucherCode,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Only create a new used transaction record if this isn't the student's own purchase
+        // (e.g., admin-generated codes or sub-admin bulk codes).
+        final redemptionRef = _firestore.collection('payment_transactions').doc();
+        transaction.set(redemptionRef, {
+          'uid': userId,
+          'examType': voucherExamType,
+          'amount': voucherData['price'] ?? 0,
+          'paymentMethod': 'voucher_redeemed',
+          'status': 'used',
+          'voucherCode': voucherCode,
+          'subAdminUid': createdBySubAdmin ?? voucherData['generatedByAdminUid'] ?? voucherData['adminId'],
+          if (paymentReference != null && paymentReference.isNotEmpty)
+            'parentPaymentReference': paymentReference,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
 
       // Save the Package Info with the `expiresAt` timestamp
       final Map<String, dynamic> packageInfo = {

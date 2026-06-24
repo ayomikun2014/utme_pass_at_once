@@ -224,6 +224,9 @@ class AuthProvider extends ChangeNotifier {
     _clearError();
     _setLoading(true);
     try {
+      if (_currentUser != null) {
+        await NotificationService.instance.removeToken(_currentUser!.uid);
+      }
       await _authService.deleteAccount(password: password);
       _currentUser = null;
       _setLoading(false);
@@ -296,6 +299,9 @@ class AuthProvider extends ChangeNotifier {
   // LOGOUT
   // ---------------------------------------------------------------------------
   Future<void> logout() async {
+    if (_currentUser != null) {
+      await NotificationService.instance.removeToken(_currentUser!.uid);
+    }
     await _authService.logout();
     _currentUser = null;
     notifyListeners();

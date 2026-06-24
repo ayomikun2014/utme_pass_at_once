@@ -100,18 +100,11 @@ class NotificationHistoryScreen extends StatelessWidget {
                               user.uid,
                               notification.id,
                             );
-                            
-                            if (notification.type == 'payment' || notification.type == 'payment_rejected') {
-                              Navigator.pushNamed(context, AppRoutes.purchase);
-                            } else if (notification.type == 'payment_approved') {
-                              Navigator.pushNamed(context, AppRoutes.unlock);
-                            } else if (notification.type == 'content_update') {
-                              Navigator.pushNamed(context, AppRoutes.mainShell);
-                            } else if (notification.type == 'result') {
-                              Navigator.pushNamed(context, AppRoutes.utmeHistory);
-                            } else if (notification.type == 'system_update' || notification.type == 'broadcast') {
-                              // Just mark as read, no special navigation needed
-                            }
+                            Navigator.pushNamed(
+                              context,
+                              AppRoutes.notificationDetails,
+                              arguments: notification,
+                            );
                           },
                           onDelete: () {
                             notificationProvider.deleteNotification(

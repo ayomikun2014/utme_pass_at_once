@@ -14,6 +14,7 @@ import 'features/auth/screens/terms_of_service.dart';
 import 'core/utils/custom_btn.dart';
 import 'core/screens/app_startup_gate.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
+import 'package:utme_pass_at_once/features/user/models/notification_model.dart';
 
 // --- USER FEATURES IMPORTS ---
 import 'package:utme_pass_at_once/features/user/screens/more/store.dart';
@@ -39,6 +40,8 @@ import 'features/user/screens/more/store/payment_details.dart';
 import 'features/user/screens/more/store/paystack_checkout.dart';
 import 'features/user/screens/more/store/select_payment.dart';
 import 'features/user/screens/more/notifications/notification_history_screen.dart';
+import 'features/user/screens/more/notifications/notification_details_screen.dart';
+import 'features/user/screens/more/announcements_history_screen.dart';
 
 // --- STUDY & SIMULATOR IMPORTS ---
 import 'features/user/screens/simulator/simulator.dart';
@@ -100,6 +103,8 @@ class AppRoutes {
   static const String bookmarked = '/bookmarked';
   static const String paystackCheckout = '/paystack_checkout';
   static const String notificationHistory = '/notification_history';
+  static const String notificationDetails = '/notification_details';
+  static const String announcements = '/announcements';
 
   // --- ECLASSROOM ROUTES ---
   static const String eclassroomTests = '/eclassroom_tests';
@@ -165,6 +170,16 @@ class AppRoutes {
     privacyPolicy: (context) => const PrivacyPolicyScreen(),
     termsOfService: (context) => const TermsOfServiceScreen(),
     notificationHistory: (context) => const NotificationHistoryScreen(),
+    notificationDetails: (context) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is NotificationModel) {
+        return NotificationDetailsScreen(notification: args);
+      } else if (args is Map<String, dynamic>) {
+        return NotificationDetailsScreen(notificationData: args);
+      }
+      return const Scaffold(body: Center(child: Text('Invalid arguments')));
+    },
+    announcements: (context) => const AnnouncementsHistoryScreen(),
     admissionGuideline: (context) =>
     const AdmissionGuidelineLandingScreen(),
     admissionRequirements: (context) =>

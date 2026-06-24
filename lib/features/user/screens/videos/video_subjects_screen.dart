@@ -88,7 +88,7 @@ class _VideoSubjectsScreenState extends State<VideoSubjectsScreen> {
                       fit: StackFit.expand,
                       children: [
                         Image.asset(
-                          'assets/images/video_subject_banner.webp',
+                          'assets/images/video_banner.webp',
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) =>
                               const CustomFallbackImage(

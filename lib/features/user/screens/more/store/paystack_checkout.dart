@@ -53,8 +53,15 @@ class _PaystackCheckoutPageState extends State<PaystackCheckoutPage> {
           },
           onWebResourceError: (error) {
             if (!_hasReturnedResult && mounted) {
-              // Ignore errors that aren't critical or are just cancelled by system
-              if (error.errorCode == -999) return;
+              // Ignore errors that aren't for the main frame (e.g. failed image/script/tracking loads)
+              if (error.isForMainFrame == false) return;
+
+              // Ignore errors caused by system cancellation or temporary backgrounding/aborted connections
+              if (error.errorCode == -999 || // iOS navigation cancelled (NSURLErrorCancelled)
+                  error.errorCode == -3 ||   // Android cache/aborted (ERR_ABORTED)
+                  error.errorCode == -14) {  // Android cache miss (ERR_CACHE_MISS)
+                return;
+              }
 
               setState(() {
                 _hasError = true;

@@ -100,7 +100,14 @@ class _HomeState extends State<Home> {
                   buildSubHeading('Quick Links', context, user: user),
                   buildQuickLinkCard(user),
 
-                  buildSubHeading('Latest News', context, user: user),
+                  buildSubHeading(
+                    'Latest News',
+                    context,
+                    isViewAll: true,
+                    route: '/news',
+                    user: user,
+                    btnText: 'Read More',
+                  ),
 
                   // 2. DYNAMIC NEWS SECTION
                   if (newsProvider.isLoading && newsProvider.newsList.isEmpty)
@@ -245,6 +252,7 @@ class _HomeState extends State<Home> {
         bool? isViewAll = false,
         String? route,
         UserModel? user,
+        String? btnText,
       }) {
     return SliverToBoxAdapter(
       child: Padding(
@@ -268,7 +276,7 @@ class _HomeState extends State<Home> {
                     Navigator.pushNamed(context, route);
                   }
                 },
-                child: const Text('View All'),
+                child: Text(btnText ?? 'View All'),
               ),
           ],
         ),
@@ -313,14 +321,14 @@ class _HomeState extends State<Home> {
 
                   if (index == 0) {
                     card = TutorialService.instance.buildShowcase(
-                      key: TutorialService.instance.quickLinksKey,
-                      title: 'Quick Navigation ⚡',
-                      description: 'Quickly access the Exam Store, check your Purchase History, chat with Cognita AI, or read the latest News.',
-                      context: context,
-                      child: card,
-                    );
-                  }
-                  return card;
+                       key: TutorialService.instance.quickLinksKey,
+                       title: 'Quick Navigation ⚡',
+                       description: 'Quickly access the Exam Store, check your Purchase History, chat with Cognita AI, or read announcements.',
+                       context: context,
+                       child: card,
+                     );
+                   }
+                   return card;
                 }(),
               ),
             ),

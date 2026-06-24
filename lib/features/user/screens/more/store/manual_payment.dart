@@ -39,6 +39,16 @@ class _ManualPaymentState extends State<ManualPayment> {
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
       if (image != null) {
         final bytes = await image.readAsBytes();
+        if (bytes.length > 5 * 1024 * 1024) {
+          if (mounted) {
+            CustomToast.show(
+              context, 
+              "Selected image is too large. Please select a receipt image under 5MB.",
+              isError: true,
+            );
+          }
+          return;
+        }
         setState(() {
           _proofImageFile = image;
           _proofImageBytes = bytes;
@@ -108,6 +118,12 @@ class _ManualPaymentState extends State<ManualPayment> {
                             baseColor: item.baseColor,
                           ),
                         ),
+                      const SizedBox(height: 24),
+
+                      // --- ATTACH RECEIPT ---
+                      _buildSectionTitle(theme, "Attach Receipt"),
+                      const SizedBox(height: 12),
+                      _buildReceiptPicker(theme, isDark, item.baseColor),
                       const SizedBox(height: 24),
                     ],
                   ),
@@ -333,6 +349,109 @@ class _ManualPaymentState extends State<ManualPayment> {
     );
   }
 
+  // --- RECEIPT PICKER ---
+  Widget _buildReceiptPicker(ThemeData theme, bool isDark, Color baseColor) {
+    if (_proofImageBytes == null) {
+      return GestureDetector(
+        onTap: _pickImage,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.surfaceDark : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.cloud_upload_outlined,
+                size: 40,
+                color: baseColor,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                "Tap to upload receipt image",
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Supports JPG, PNG (Max 5MB)",
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surfaceDark : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.memory(
+              _proofImageBytes!,
+              width: 60,
+              height: 60,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _proofImageFile?.name ?? "Receipt Image",
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "${(_proofImageBytes!.length / 1024).toStringAsFixed(1)} KB",
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+            onPressed: () {
+              setState(() {
+                _proofImageFile = null;
+                _proofImageBytes = null;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- 5. BOTTOM BAR ---
   Widget _buildBottomBar(
     BuildContext context,
@@ -389,28 +508,16 @@ class _ManualPaymentState extends State<ManualPayment> {
             ),
           ),
           const SizedBox(height: 16),
-
           CustomBtn(
             label: isProcessing
-                ? "Uploading & Processing..."
-                : "Upload Receipt & Submit",
-            onPressed: _hasReadInstructions && !isProcessing
+                ? "Processing..."
+                : "Submit",
+            onPressed: _hasReadInstructions && _proofImageBytes != null && !isProcessing
                 ? () async {
                     final auth = context.read<AuthProvider>();
                     final user = auth.currentUser;
                     if (user == null) {
                       CustomToast.show(context, 'Please log in first');
-                      return;
-                    }
-
-                    // 1. Pick Image
-                    await _pickImage();
-                    
-                    // 2. Validate Image
-                    if (_proofImageBytes == null) {
-                      if (context.mounted) {
-                        CustomToast.show(context, 'Action cancelled. You must upload your receipt.');
-                      }
                       return;
                     }
 
@@ -459,10 +566,10 @@ class _ManualPaymentState extends State<ManualPayment> {
                     }
                   }
                 : null,
-            backgroundColor: _hasReadInstructions
+            backgroundColor: _hasReadInstructions && _proofImageBytes != null
                 ? AppColors.primary
                 : Colors.grey.withValues(alpha: 0.5),
-            textColor: _hasReadInstructions
+            textColor: _hasReadInstructions && _proofImageBytes != null
                 ? Colors.white
                 : Colors.grey,
           ),

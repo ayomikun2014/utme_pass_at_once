@@ -19,40 +19,11 @@ class _SliverHomeCardState extends State<SliverHomeCard>
   Timer? _timer;
   late AnimationController _bubbleController;
 
-  final List<Map<String, String>> _slidingContent = [
-    {
-      'title': 'Study & Practice Anywhere',
-      'subtitle':
-          'Access JAMB, WAEC & NECO past questions with 50,000+ real exam practice',
-    },
-    {
-      'title': 'Past Questions Library',
-      'subtitle':
-          'Practice with 10+ years of real exam questions across multiple subjects',
-    },
-    {
-      'title': 'Flexible Access',
-      'subtitle':
-          'Unlock any subject or exam like JAMB, WAEC, or NECO based on your needs',
-    },
-    {
-      'title': 'Choose What to Unlock',
-      'subtitle':
-          'Get access to specific exams, subjects, or institutions anytime you want',
-    },
-    {
-      'title': 'CBT Exam Simulation',
-      'subtitle': 'Practice with real exam timing and interface like JAMB CBT',
-    },
-    {
-      'title': 'Track Your Progress',
-      'subtitle': 'Monitor your scores, strengths, and improvement over time',
-    },
-    {
-      'title': 'Smart AI Assistance',
-      'subtitle':
-          'Get instant explanations and guidance powered by AI while you study',
-    },
+  final List<String> _slidingContent = [
+    'assets/images/slidingcontent01.webp',
+    'assets/images/slidingcontent02.webp',
+    'assets/images/slidingcontent03.webp',
+    'assets/images/slidingcontent04.webp',
   ];
 
   @override
@@ -173,6 +144,41 @@ class _SliverHomeCardState extends State<SliverHomeCard>
                   },
                 ),
 
+                // Sliding Images taking full width & height (no margin, no padding)
+                Positioned.fill(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 600),
+                    transitionBuilder:
+                        (Widget child, Animation<double> animation) {
+                      final inAnimation = Tween<Offset>(
+                        begin: const Offset(1.0, 0.0),
+                        end: Offset.zero,
+                      ).animate(animation);
+                      final outAnimation = Tween<Offset>(
+                        begin: const Offset(-1.0, 0.0),
+                        end: Offset.zero,
+                      ).animate(animation);
+
+                      return SlideTransition(
+                        position: child.key == ValueKey<int>(_currentIndex)
+                            ? inAnimation
+                            : outAnimation,
+                        child: FadeTransition(
+                          opacity: animation,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Image.asset(
+                      _slidingContent[_currentIndex],
+                      key: ValueKey<int>(_currentIndex),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                    ),
+                  ),
+                ),
+
                 // Foreground Content
                 Padding(
                   padding: const EdgeInsets.all(20.0),
@@ -189,47 +195,6 @@ class _SliverHomeCardState extends State<SliverHomeCard>
                           Expanded(
                             child: Stack(
                               children: [
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 600),
-                                  transitionBuilder:
-                                      (Widget child, Animation<double> animation) {
-                                    return SlideTransition(
-                                      position: Tween<Offset>(
-                                        begin: const Offset(0.0, 0.5),
-                                        end: Offset.zero,
-                                      ).animate(animation),
-                                      child: FadeTransition(
-                                        opacity: animation,
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: Column(
-                                    key: ValueKey<int>(_currentIndex),
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _slidingContent[_currentIndex]['title']!,
-                                        style: Theme.of(context).textTheme.displayLarge
-                                            ?.copyWith(
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        _slidingContent[_currentIndex]['subtitle']!,
-                                        style: Theme.of(context).textTheme.bodyLarge
-                                            ?.copyWith(
-                                              fontSize: 14,
-                                              color: Colors.white70,
-                                            ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                                 if (isActuallyPremium)
                                   Positioned(
                                     top: 0,

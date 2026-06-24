@@ -1,3 +1,6 @@
+const { setGlobalOptions } = require("firebase-functions/v2");
+setGlobalOptions({ memory: "256MiB" });
+
 const { onRequest } = require("firebase-functions/v2/https");
 const {
   onDocumentUpdated,
@@ -285,6 +288,8 @@ async function sendPushNotification(
     });
 
     safeData.type = String(type);
+    safeData.title = String(notification.title || "");
+    safeData.body = String(notification.body || "");
 
     const sendPromises = tokens.map(async (token) => {
       const singleMessage = {
@@ -1343,9 +1348,10 @@ exports.ontransactionupdated = onDocumentUpdated(
     const newData = event.data.after.data();
     const oldData = event.data.before.data();
 
-    const isNewlyApproved = newData.status === "completed" && oldData.status !== "completed";
+    const isNewlyApproved = (newData.status === "completed" || newData.status === "approved") &&
+                            (oldData.status !== "completed" && oldData.status !== "approved");
 
-    if (isNewlyApproved) {
+    if (isNewlyApproved && newData && newData.uid) {
       await sendPushNotification(
         newData.uid,
         {
@@ -1356,13 +1362,13 @@ exports.ontransactionupdated = onDocumentUpdated(
         {
           voucherCode: newData.voucherCode || "",
           examType: newData.examType,
-          reference: newData.reference,
+          reference: newData.reference || event.params.txId,
         },
         "payment",
       );
     }
 
-    if (newData.status === "failed" && oldData.status !== "failed") {
+    if (newData && newData.status === "failed" && oldData && oldData.status !== "failed" && newData.uid) {
       const amount = newData.expectedAmount ? (newData.expectedAmount / 100) : 0;
       await sendPushNotification(
         newData.uid,
@@ -1749,6 +1755,46 @@ exports.onadminbroadcastcreated = onDocumentCreated(
 );
 
 /**
+ * Trigger: Backend Push Notification for Announcements
+ */
+exports.onannouncementcreated = onDocumentCreated(
+  {
+    document: "announcements/{docId}",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
+  async (event) => {
+    const data = event.data.data();
+    if (!data) return;
+
+    const title = data.title || "New Announcement";
+    const description = data.description || "";
+
+    const message = {
+      notification: {
+        title: title,
+        body: description.length > 100 ? description.substring(0, 97) + "..." : description,
+      },
+      topic: "all",
+      data: {
+        click_action: "FLUTTER_NOTIFICATION_CLICK",
+        route: "/announcements",
+        title: title,
+        body: description,
+        type: "broadcast",
+      },
+    };
+
+    try {
+      await admin.messaging().send(message);
+      logger.info(`Announcement notification sent to topic 'all'`);
+    } catch (error) {
+      logger.error("Failed to send announcement notification to topic 'all'", error);
+    }
+  }
+);
+
+/**
  * Fans out classroom updates (notice, test, assignment, study note) from a sub-admin
  * to all referred students under that specific sub-admin center.
  */
@@ -2122,13 +2168,23 @@ exports.syncNews = onSchedule(
         };
 
         if (!docSnap.exists) {
-          // Brand new article!
-          brandNewArticlesCount++;
-          if (!latestBrandNewArticle) {
-            latestBrandNewArticle = newsData;
-            latestBrandNewArticle.id = docId;
+          // Check if article with the same title already exists in the collection (duplicate detection)
+          const titleCheck = await db.collection("news")
+            .where("title", "==", newsData.title)
+            .limit(1)
+            .get();
+
+          if (titleCheck.empty) {
+            // Brand new article!
+            brandNewArticlesCount++;
+            if (!latestBrandNewArticle) {
+              latestBrandNewArticle = newsData;
+              latestBrandNewArticle.id = docId;
+            }
+            await docRef.set(newsData);
+          } else {
+            logger.info(`syncNews: Article with title "${newsData.title}" already exists. Skipping duplicate notification.`);
           }
-          await docRef.set(newsData);
         } else {
           // Update the existing article to refresh fields if content updated
           await docRef.update({

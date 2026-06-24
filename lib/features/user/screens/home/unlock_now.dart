@@ -1157,6 +1157,8 @@ class _UnlockNowState extends State<UnlockNow>
             throw Exception('Failed to download study materials. You can try redownloading later.');
           }
 
+          provider.setActivationComplete(true);
+
           return true;
         },
         onComplete: () {

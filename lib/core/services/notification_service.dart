@@ -9,6 +9,8 @@ import '../../firebase_options.dart';
 import '../utils/device_helper.dart';
 import '../../main.dart';
 import 'package:flutter_app_badge_control/flutter_app_badge_control.dart';
+import '../../routes.dart';
+import 'network_service.dart';
 
 class NotificationService with WidgetsBindingObserver {
   NotificationService._();
@@ -103,6 +105,14 @@ class NotificationService with WidgetsBindingObserver {
         }
       });
 
+      // Connectivity restore retry
+      NetworkService.instance.connectivityStream.listen((online) {
+        if (online && _currentUserId != null) {
+          debugPrint('🌐 [NOTIFICATION] Connectivity restored. Re-registering FCM token for $_currentUserId');
+          registerToken(_currentUserId!);
+        }
+      });
+
       WidgetsBinding.instance.addObserver(this);
       _isInitialized = true;
     } catch (e) {
@@ -163,9 +173,10 @@ class NotificationService with WidgetsBindingObserver {
             .delete();
       }
       await _fcm.deleteToken();
-      _currentUserId = null;
     } catch (e) {
       debugPrint('Remove token error: $e');
+    } finally {
+      _currentUserId = null;
     }
   }
 
@@ -208,15 +219,15 @@ class NotificationService with WidgetsBindingObserver {
       FlutterAppBadgeControl.removeBadge();
 
       if (data is Map<String, dynamic>) {
-        final route = data['route'];
-        if (route == null) return;
-
         pendingRoute = data;
 
         if (rootNavigatorKey.currentState != null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             pendingRoute = null;
-            rootNavigatorKey.currentState?.pushNamed(route, arguments: data);
+            rootNavigatorKey.currentState?.pushNamed(
+              AppRoutes.notificationDetails,
+              arguments: data,
+            );
           });
         }
       }
@@ -228,12 +239,12 @@ class NotificationService with WidgetsBindingObserver {
   static void checkPendingRoute() {
     final pending = pendingRoute;
 
-    if (pending != null && pending.containsKey('route')) {
+    if (pending != null) {
       pendingRoute = null;
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         rootNavigatorKey.currentState?.pushNamed(
-          pending['route'],
+          AppRoutes.notificationDetails,
           arguments: pending,
         );
       });

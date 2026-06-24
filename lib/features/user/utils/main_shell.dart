@@ -1,4 +1,7 @@
 import 'package:utme_pass_at_once/core/utils/custom_toast.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:utme_pass_at_once/features/user/providers/announcement_provider.dart';
+import 'package:utme_pass_at_once/features/user/screens/more/announcements/announcement_carousel_dialog.dart';
 
 import 'dart:async';
 
@@ -296,6 +299,31 @@ class _MainShellState extends State<MainShell> {
 
     if (mounted) {
       await TutorialService.instance.checkAndShowTutorial(context);
+    }
+
+    // --- Global Announcement check ---
+    if (mounted) {
+      try {
+        await FirebaseMessaging.instance.subscribeToTopic('all');
+        if (!mounted) return;
+        final announcementProvider = context.read<AnnouncementProvider>();
+        await announcementProvider.fetchAnnouncements();
+        final unseen = announcementProvider.getUnseenAnnouncements();
+        if (unseen.isNotEmpty && mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AnnouncementCarouselDialog(
+              announcements: unseen,
+              onDismiss: () {
+                announcementProvider.markAllAsSeen();
+              },
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Announcement check error: $e');
+      }
     }
   }
 
