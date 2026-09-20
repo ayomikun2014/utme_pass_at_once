@@ -55,7 +55,9 @@ class _CustomTextfieldState extends State<CustomTextfield> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dividerColor = isDark ? AppColors.dividerDark : AppColors.dividerLight;
+    final dividerColor = isDark
+        ? AppColors.dividerDark
+        : AppColors.dividerLight;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,10 +122,7 @@ class _CustomTextfieldState extends State<CustomTextfield> {
             // Borders — now theme-aware
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: dividerColor,
-                width: 1,
-              ),
+              borderSide: BorderSide(color: dividerColor, width: 1),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -139,10 +138,7 @@ class _CustomTextfieldState extends State<CustomTextfield> {
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(
-                color: dividerColor,
-                width: 1,
-              ),
+              borderSide: BorderSide(color: dividerColor, width: 1),
             ),
           ),
         ),

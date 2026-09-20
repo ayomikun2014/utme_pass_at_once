@@ -66,12 +66,12 @@ class CustomGridCard extends StatelessWidget {
           boxShadow: isDark
               ? null
               : [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
-          ],
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
@@ -134,12 +134,12 @@ class CustomGridCard extends StatelessWidget {
                       boxShadow: isDark
                           ? []
                           : [
-                        BoxShadow(
-                          color: baseColor.withValues(alpha: 0.2),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                              BoxShadow(
+                                color: baseColor.withValues(alpha: 0.2),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                     ),
                     child: imagePath != null
                         ? Padding(

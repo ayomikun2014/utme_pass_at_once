@@ -27,12 +27,9 @@ class RichContentRenderer extends StatelessWidget {
     final theme = Theme.of(context);
     // Ensure the style always has a color — RichText does NOT inherit
     // DefaultTextStyle, so null color renders as white/invisible.
-    final baseStyle = textStyle ??
-        const TextStyle(
-          fontSize: 16,
-          height: 1.6,
-          fontWeight: FontWeight.bold,
-        );
+    final baseStyle =
+        textStyle ??
+        const TextStyle(fontSize: 16, height: 1.6, fontWeight: FontWeight.bold);
     final defaultStyle = baseStyle.copyWith(
       color: baseStyle.color ?? theme.colorScheme.onSurface,
     );
@@ -76,7 +73,9 @@ class RichContentRenderer extends StatelessWidget {
             src = BackendApi.publicFileUrl(rawSrc);
           }
 
-          final isSvg = src.toLowerCase().contains('.svg'); // Use contains because of query params
+          final isSvg = src.toLowerCase().contains(
+            '.svg',
+          ); // Use contains because of query params
 
           return Container(
             width: double.infinity,
@@ -91,33 +90,41 @@ class RichContentRenderer extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: (src.startsWith('http'))
                   ? (isSvg
-                      ? SvgPicture.network(
-                          src,
-                          fit: BoxFit.contain,
-                          placeholderBuilder: (context) =>
-                              const SizedBox(height: 150, child: Center(child: CustomLoader())),
-                          // Handle network SVG errors gracefully
-                          errorBuilder: (context, error, stackTrace) => _buildErrorDiagram(theme),
-                        )
-                      : CachedNetworkImage(
-                          imageUrl: src,
-                          fit: BoxFit.contain,
-                          placeholder: (context, url) =>
-                              const SizedBox(height: 150, child: Center(child: CustomLoader())),
-                          errorWidget: (context, url, error) => _buildErrorDiagram(theme),
-                        ))
+                        ? SvgPicture.network(
+                            src,
+                            fit: BoxFit.contain,
+                            placeholderBuilder: (context) => const SizedBox(
+                              height: 150,
+                              child: Center(child: CustomLoader()),
+                            ),
+                            // Handle network SVG errors gracefully
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildErrorDiagram(theme),
+                          )
+                        : CachedNetworkImage(
+                            imageUrl: src,
+                            fit: BoxFit.contain,
+                            placeholder: (context, url) => const SizedBox(
+                              height: 150,
+                              child: Center(child: CustomLoader()),
+                            ),
+                            errorWidget: (context, url, error) =>
+                                _buildErrorDiagram(theme),
+                          ))
                   : (isSvg
-                      ? SvgPicture.asset(
-                          src,
-                          fit: BoxFit.contain,
-                          // Handle asset SVG errors gracefully
-                          errorBuilder: (context, error, stackTrace) => _buildErrorDiagram(theme),
-                        )
-                      : Image.asset(
-                          src,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => _buildErrorDiagram(theme),
-                        )),
+                        ? SvgPicture.asset(
+                            src,
+                            fit: BoxFit.contain,
+                            // Handle asset SVG errors gracefully
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildErrorDiagram(theme),
+                          )
+                        : Image.asset(
+                            src,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildErrorDiagram(theme),
+                          )),
             ),
           );
 
@@ -138,7 +145,11 @@ class RichContentRenderer extends StatelessWidget {
     }
   }
 
-  Widget _buildTable(ContentBlockModel block, TextStyle style, ThemeData theme) {
+  Widget _buildTable(
+    ContentBlockModel block,
+    TextStyle style,
+    ThemeData theme,
+  ) {
     final borderColor = theme.colorScheme.onSurface.withValues(alpha: 0.2);
 
     return SingleChildScrollView(
@@ -197,7 +208,8 @@ class RichContentRenderer extends StatelessWidget {
           Icon(
             Icons.broken_image_rounded,
             size: 40,
-            color: iconColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.2),
+            color:
+                iconColor ?? theme.colorScheme.onSurface.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 8),
           Text(
@@ -223,7 +235,8 @@ class RichContentRenderer extends StatelessWidget {
           latex,
           textStyle: style,
           mathStyle: MathStyle.display,
-          onErrorFallback: (err) => Text(latex, style: style.copyWith(color: Colors.red)),
+          onErrorFallback: (err) =>
+              Text(latex, style: style.copyWith(color: Colors.red)),
         ),
       );
     }
@@ -235,15 +248,20 @@ class RichContentRenderer extends StatelessWidget {
 
     void flushMath() {
       if (mathBuffer.trim().isNotEmpty) {
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Math.tex(
-            mathBuffer.trim(),
-            textStyle: style,
-            mathStyle: MathStyle.text,
-            onErrorFallback: (err) => Text(mathBuffer.trim(), style: style.copyWith(color: Colors.red)),
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Math.tex(
+              mathBuffer.trim(),
+              textStyle: style,
+              mathStyle: MathStyle.text,
+              onErrorFallback: (err) => Text(
+                mathBuffer.trim(),
+                style: style.copyWith(color: Colors.red),
+              ),
+            ),
           ),
-        ));
+        );
       }
       mathBuffer = '';
     }
@@ -281,7 +299,9 @@ class RichContentRenderer extends StatelessWidget {
         depth--;
       }
 
-      if (latex[i] == r'\' && i + 1 < latex.length && (latex[i+1] == '{' || latex[i+1] == '}')) {
+      if (latex[i] == r'\' &&
+          i + 1 < latex.length &&
+          (latex[i + 1] == '{' || latex[i + 1] == '}')) {
         mathBuffer += latex.substring(i, i + 2);
         i += 2;
         continue;
@@ -302,15 +322,13 @@ class RichContentRenderer extends StatelessWidget {
           latex,
           textStyle: style,
           mathStyle: MathStyle.display,
-          onErrorFallback: (err) => Text(latex, style: style.copyWith(color: Colors.red)),
+          onErrorFallback: (err) =>
+              Text(latex, style: style.copyWith(color: Colors.red)),
         ),
       );
     }
 
-    return RichText(
-      text: TextSpan(children: spans),
-      softWrap: true,
-    );
+    return RichText(text: TextSpan(children: spans), softWrap: true);
   }
 }
 
@@ -335,13 +353,17 @@ Widget _buildStyledText(String text, TextStyle defaultStyle) {
   for (final match in matches) {
     if (match.start > lastIndex) {
       final segment = text.substring(lastIndex, match.start);
-      spans.add(TextSpan(
-        text: segment,
-        style: defaultStyle.copyWith(
-          fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
-          decoration: isUnderlined ? TextDecoration.underline : defaultStyle.decoration,
+      spans.add(
+        TextSpan(
+          text: segment,
+          style: defaultStyle.copyWith(
+            fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
+            decoration: isUnderlined
+                ? TextDecoration.underline
+                : defaultStyle.decoration,
+          ),
         ),
-      ));
+      );
     }
 
     final tag = match.group(0);
@@ -360,13 +382,17 @@ Widget _buildStyledText(String text, TextStyle defaultStyle) {
 
   if (lastIndex < text.length) {
     final segment = text.substring(lastIndex);
-    spans.add(TextSpan(
-      text: segment,
-      style: defaultStyle.copyWith(
-        fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
-        decoration: isUnderlined ? TextDecoration.underline : defaultStyle.decoration,
+    spans.add(
+      TextSpan(
+        text: segment,
+        style: defaultStyle.copyWith(
+          fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
+          decoration: isUnderlined
+              ? TextDecoration.underline
+              : defaultStyle.decoration,
+        ),
       ),
-    ));
+    );
   }
 
   return RichText(

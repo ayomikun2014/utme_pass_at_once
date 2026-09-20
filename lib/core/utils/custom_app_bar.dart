@@ -90,7 +90,8 @@ class CustomAppBar extends StatelessWidget {
                   icon: Icons.notifications_rounded,
                   accent: const Color(0xFFF59E0B),
                   title: 'Your alerts',
-                  description: 'New activation codes, payment updates and announcements land here. The red dot means something is waiting for you.',
+                  description:
+                      'New activation codes, payment updates and announcements land here. The red dot means something is waiting for you.',
                   context: context,
                   isCircleBorder: true,
                   child: bellWidget,
@@ -129,22 +130,24 @@ class CustomAppBar extends StatelessWidget {
             centerTitle:
                 centerTitle, // Will center for Study/Test, left-align for Home
             // --- 3. COLLAPSED TITLE (Fades IN when scrolled UP) ---
-            title: hideTitleOnCollapse ? null : AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: isCollapsed ? 1.0 : 0.0,
-              child: GestureDetector(
-                onTap: onTitlePressed,
-                child: Text(
-                  title,
-                  maxLines: 2,
-                  style: GoogleFonts.outfit(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: theme.textTheme.displayLarge?.color,
+            title: hideTitleOnCollapse
+                ? null
+                : AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: isCollapsed ? 1.0 : 0.0,
+                    child: GestureDetector(
+                      onTap: onTitlePressed,
+                      child: Text(
+                        title,
+                        maxLines: 2,
+                        style: GoogleFonts.outfit(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: theme.textTheme.displayLarge?.color,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
 
             //EXPANDED CONTENT (Fades OUT when scrolled UP) ---
             background: SafeArea(
@@ -178,15 +181,17 @@ class CustomAppBar extends StatelessWidget {
                               );
 
                               if (title.startsWith('Hello,')) {
-                                titleWidget = TutorialService.instance.buildShowcase(
-                                  key: TutorialService.instance.welcomeKey,
-                                  icon: Icons.person_rounded,
-                                  accent: AppColors.primary,
-                                  title: 'Welcome to Pass At Once',
-                                  description: 'This is your home. Tap your name at any time to open your profile, orders and account settings.',
-                                  context: context,
-                                  child: titleWidget,
-                                );
+                                titleWidget = TutorialService.instance
+                                    .buildShowcase(
+                                      key: TutorialService.instance.welcomeKey,
+                                      icon: Icons.person_rounded,
+                                      accent: AppColors.primary,
+                                      title: 'Welcome to Pass At Once',
+                                      description:
+                                          'This is your home. Tap your name at any time to open your profile, orders and account settings.',
+                                      context: context,
+                                      child: titleWidget,
+                                    );
                               }
 
                               return Column(
@@ -194,14 +199,20 @@ class CustomAppBar extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   titleWidget,
-                                  if (subtitle != null && subtitle!.isNotEmpty) ...[
+                                  if (subtitle != null &&
+                                      subtitle!.isNotEmpty) ...[
                                     const SizedBox(height: 4),
                                     Text(
                                       subtitle!,
-                                      style: subtitleStyle ?? 
+                                      style:
+                                          subtitleStyle ??
                                           GoogleFonts.plusJakartaSans(
                                             fontSize: 14,
-                                            color: theme.textTheme.bodyMedium?.color?.withValues(alpha: 0.8),
+                                            color: theme
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.color
+                                                ?.withValues(alpha: 0.8),
                                             fontWeight: FontWeight.w600,
                                           ),
                                       maxLines: 2,
@@ -210,7 +221,7 @@ class CustomAppBar extends StatelessWidget {
                                   ],
                                 ],
                               );
-                            }
+                            },
                           ),
                         ),
                       ),
@@ -236,7 +247,11 @@ class CustomAppBar extends StatelessWidget {
                                     placeholder: (context, url) =>
                                         const SizedBox.shrink(),
                                     errorWidget: (context, url, error) =>
-                                        const Icon(Icons.school, color: Colors.white, size: 24),
+                                        const Icon(
+                                          Icons.school,
+                                          color: Colors.white,
+                                          size: 24,
+                                        ),
                                   ),
                           ),
                         ),

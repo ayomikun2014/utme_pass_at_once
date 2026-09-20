@@ -15,7 +15,7 @@ class CustomToast {
     dismiss();
 
     final overlay = Overlay.of(context);
-    
+
     _currentEntry = OverlayEntry(
       builder: (context) => _ToastWidget(
         message: message,
@@ -55,7 +55,8 @@ class _ToastWidget extends StatefulWidget {
   State<_ToastWidget> createState() => _ToastWidgetState();
 }
 
-class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderStateMixin {
+class _ToastWidgetState extends State<_ToastWidget>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _yOffsetAnimation;
   late Animation<double> _opacityAnimation;
@@ -69,12 +70,10 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
       duration: const Duration(milliseconds: 400),
     );
 
-    _yOffsetAnimation = Tween<double>(begin: -120, end: 0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOutBack,
-      ),
-    );
+    _yOffsetAnimation = Tween<double>(
+      begin: -120,
+      end: 0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
     _opacityAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
@@ -110,9 +109,13 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
     final isDark = theme.brightness == Brightness.dark;
 
     final cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
-    final shadowColor = isDark ? Colors.black87 : Colors.black.withValues(alpha: 0.08);
+    final shadowColor = isDark
+        ? Colors.black87
+        : Colors.black.withValues(alpha: 0.08);
     final textColor = isDark ? Colors.white : const Color(0xFF2E2E2E);
-    final accentColor = widget.isError ? const Color(0xFFE57373) : const Color(0xFF81C784);
+    final accentColor = widget.isError
+        ? const Color(0xFFE57373)
+        : const Color(0xFF81C784);
     final iconColor = widget.isError ? Colors.redAccent : Colors.green[600]!;
 
     return SafeArea(
@@ -125,10 +128,7 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
             builder: (context, child) {
               return Transform.translate(
                 offset: Offset(0, _yOffsetAnimation.value),
-                child: Opacity(
-                  opacity: _opacityAnimation.value,
-                  child: child,
-                ),
+                child: Opacity(opacity: _opacityAnimation.value, child: child),
               );
             },
             child: Material(
@@ -140,7 +140,9 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                   color: cardColor,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF2C2C2C) : const Color(0xFFEFEFEF),
+                    color: isDark
+                        ? const Color(0xFF2C2C2C)
+                        : const Color(0xFFEFEFEF),
                     width: 1.5,
                   ),
                   boxShadow: [
@@ -172,7 +174,9 @@ class _ToastWidgetState extends State<_ToastWidget> with SingleTickerProviderSta
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          widget.isError ? Icons.error_rounded : Icons.check_circle_rounded,
+                          widget.isError
+                              ? Icons.error_rounded
+                              : Icons.check_circle_rounded,
                           color: iconColor,
                           size: 20,
                         ),

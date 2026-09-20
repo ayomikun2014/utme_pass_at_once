@@ -32,7 +32,9 @@ class ContactHelper {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
         // Fallback for some devices/browsers
-        final Uri fallbackUrl = Uri.parse('https://api.whatsapp.com/send?phone=$cleanPhone&text=$encodedMessage');
+        final Uri fallbackUrl = Uri.parse(
+          'https://api.whatsapp.com/send?phone=$cleanPhone&text=$encodedMessage',
+        );
         if (await canLaunchUrl(fallbackUrl)) {
           await launchUrl(fallbackUrl, mode: LaunchMode.externalApplication);
         } else {
@@ -47,15 +49,16 @@ class ContactHelper {
   // =========================
   // 2. EMAIL
   // =========================
-  static Future<void> openEmail(String emailAddress, {String subject = 'Support Request', String body = 'Hi support team, '}) async {
+  static Future<void> openEmail(
+    String emailAddress, {
+    String subject = 'Support Request',
+    String body = 'Hi support team, ',
+  }) async {
     try {
       final Uri emailUri = Uri(
         scheme: 'mailto',
         path: emailAddress,
-        queryParameters: {
-          'subject': subject,
-          'body': body,
-        },
+        queryParameters: {'subject': subject, 'body': body},
       );
 
       if (await canLaunchUrl(emailUri)) {

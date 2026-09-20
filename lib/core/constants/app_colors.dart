@@ -6,7 +6,9 @@ class AppColors {
 
   // --- Brand Colors ---
   static const Color primary = Color(0xFF0D9488); // Primary teal color
-  static const Color primaryDark = Color(0xFF14B8A6); // Lighter teal for dark mode
+  static const Color primaryDark = Color(
+    0xFF14B8A6,
+  ); // Lighter teal for dark mode
   static const Color accent = Color(0xFFF59E0B); // Accent amber
 
   // --- Theme Colors (Light) ---

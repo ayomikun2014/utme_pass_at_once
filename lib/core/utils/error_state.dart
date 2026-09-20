@@ -18,7 +18,9 @@ Widget buildErrorState(BuildContext context, NewsProvider provider) {
             width: 120,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isDark ? Colors.white10 : AppColors.primary.withValues(alpha: 0.1),
+              color: isDark
+                  ? Colors.white10
+                  : AppColors.primary.withValues(alpha: 0.1),
             ),
             child: const Center(
               child: Icon(
@@ -53,7 +55,9 @@ Widget buildErrorState(BuildContext context, NewsProvider provider) {
             width: 160,
             child: CustomBtn(
               label: 'Retry',
-              backgroundColor: isDark ? AppColors.surfaceDark : AppColors.primary,
+              backgroundColor: isDark
+                  ? AppColors.surfaceDark
+                  : AppColors.primary,
               onPressed: () {
                 provider.loadNews(); // Trigger the fetch again
               },

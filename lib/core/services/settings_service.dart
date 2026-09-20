@@ -51,20 +51,20 @@ class SettingsService {
     return _ref
         .snapshots()
         .asyncMap((doc) async {
-      if (!doc.exists || doc.data() == null) {
-        return AppSettingsModel.initial();
-      }
+          if (!doc.exists || doc.data() == null) {
+            return AppSettingsModel.initial();
+          }
 
-      final data = doc.data()!;
-      final settings = AppSettingsModel.fromMap(data);
+          final data = doc.data()!;
+          final settings = AppSettingsModel.fromMap(data);
 
-      await _cacheSettings(settings);
+          await _cacheSettings(settings);
 
-      return settings;
-    })
+          return settings;
+        })
         .handleError((error) {
-      debugPrint('⚠️ App settings stream error: $error');
-    });
+          debugPrint('⚠️ App settings stream error: $error');
+        });
   }
 
   Future<AppSettingsModel?> _getCachedSettings() async {

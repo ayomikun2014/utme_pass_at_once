@@ -25,7 +25,7 @@ class TTSService {
 
     try {
       _flutterTts = FlutterTts();
-      
+
       await _flutterTts?.setLanguage("en-US");
       await _flutterTts?.setSpeechRate(_speechRate);
       await _flutterTts?.setVolume(_volume);
@@ -69,7 +69,9 @@ class TTSService {
 
       _currentText = text;
       await _flutterTts?.speak(text);
-      debugPrint('🔊 TTS: Speaking: ${text.substring(0, text.length > 50 ? 50 : text.length)}...');
+      debugPrint(
+        '🔊 TTS: Speaking: ${text.substring(0, text.length > 50 ? 50 : text.length)}...',
+      );
     } catch (e) {
       debugPrint('❌ TTS: Failed to speak: $e');
     }
@@ -170,6 +172,3 @@ class TTSService {
     debugPrint('🗑️ TTS: Disposed');
   }
 }
-
-
-

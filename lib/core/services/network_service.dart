@@ -9,7 +9,7 @@ class NetworkService with WidgetsBindingObserver {
   static final NetworkService instance = NetworkService._();
 
   final Connectivity _connectivity = Connectivity();
-  
+
   // Stream controller to broadcast connectivity status
   final _controller = StreamController<bool>.broadcast();
   Stream<bool> get connectivityStream => _controller.stream;
@@ -53,18 +53,19 @@ class NetworkService with WidgetsBindingObserver {
 
   Future<void> _updateStatus(List<ConnectivityResult> results) async {
     bool online = false;
-    
+
     // connectivity_plus 6.0+ returns a List<ConnectivityResult>
     if (results.contains(ConnectivityResult.none)) {
       // Explicitly check actual internet as a fallback
       // (crucial for emulators/devices reporting 'none' incorrectly but having network access)
       online = await _checkActualInternet();
-    } else if (results.any((result) => 
-        result == ConnectivityResult.mobile || 
-        result == ConnectivityResult.wifi || 
-        result == ConnectivityResult.ethernet || 
-        result == ConnectivityResult.vpn)) {
-      
+    } else if (results.any(
+      (result) =>
+          result == ConnectivityResult.mobile ||
+          result == ConnectivityResult.wifi ||
+          result == ConnectivityResult.ethernet ||
+          result == ConnectivityResult.vpn,
+    )) {
       // If we have an active network interface, we assume we are online.
       // We perform a fast socket lookup in the background to confirm route access.
       online = await _checkActualInternet();
@@ -84,7 +85,7 @@ class NetworkService with WidgetsBindingObserver {
   /// Pings public DNS servers via socket or falls back to DNS lookup
   Future<bool> _checkActualInternet() async {
     final List<String> ips = ['8.8.8.8', '1.1.1.1', '208.67.222.222'];
-    
+
     try {
       // 1. Try socket connections to port 53 (DNS port) first - fast, bypasses DNS overhead/weaknesses
       final socketResults = await Future.wait(
@@ -95,8 +96,9 @@ class NetworkService with WidgetsBindingObserver {
 
     // 2. Fallback: If port 53 is blocked or fails, try standard DNS lookup for google.com
     try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
+      final result = await InternetAddress.lookup(
+        'google.com',
+      ).timeout(const Duration(seconds: 3));
       return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
     } catch (_) {}
 
@@ -105,7 +107,11 @@ class NetworkService with WidgetsBindingObserver {
 
   Future<bool> _testSocketConnection(String ip) async {
     try {
-      final socket = await Socket.connect(ip, 53, timeout: const Duration(seconds: 2));
+      final socket = await Socket.connect(
+        ip,
+        53,
+        timeout: const Duration(seconds: 2),
+      );
       socket.destroy();
       return true;
     } catch (_) {

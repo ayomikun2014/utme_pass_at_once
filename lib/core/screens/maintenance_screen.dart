@@ -30,7 +30,8 @@ class MaintenanceScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface, // Replaced ternary logic
+                    color:
+                        theme.colorScheme.onSurface, // Replaced ternary logic
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -40,18 +41,27 @@ class MaintenanceScreen extends StatelessWidget {
                   style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
                 ),
                 const SizedBox(height: 32),
-                if (settings.contactEmail.isNotEmpty || settings.supportPhones.isNotEmpty) ...[
+                if (settings.contactEmail.isNotEmpty ||
+                    settings.supportPhones.isNotEmpty) ...[
                   Divider(color: theme.dividerColor),
                   const SizedBox(height: 16),
                   Text(
                     'Need urgent help?',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   if (settings.contactEmail.isNotEmpty)
-                    Text(settings.contactEmail, style: theme.textTheme.bodyMedium),
+                    Text(
+                      settings.contactEmail,
+                      style: theme.textTheme.bodyMedium,
+                    ),
                   if (settings.primaryPhone != null)
-                    Text(settings.primaryPhone!.phoneNumber, style: theme.textTheme.bodyMedium),
+                    Text(
+                      settings.primaryPhone!.phoneNumber,
+                      style: theme.textTheme.bodyMedium,
+                    ),
                 ],
               ],
             ),

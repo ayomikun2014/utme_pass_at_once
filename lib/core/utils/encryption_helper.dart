@@ -2,7 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart'; // Make sure this is in pubspec.yaml
-import 'package:encrypt/encrypt.dart' as enc; // Make sure this is in pubspec.yaml
+import 'package:encrypt/encrypt.dart'
+    as enc; // Make sure this is in pubspec.yaml
 
 class EncryptionHelper {
   // You can type literally anything here.
@@ -42,7 +43,10 @@ class EncryptionHelper {
 
       final encryptedBytes = await file.readAsBytes();
       final encrypter = enc.Encrypter(enc.AES(_getKey));
-      final decrypted = encrypter.decryptBytes(enc.Encrypted(encryptedBytes), iv: _iv);
+      final decrypted = encrypter.decryptBytes(
+        enc.Encrypted(encryptedBytes),
+        iv: _iv,
+      );
 
       return Uint8List.fromList(decrypted);
     } catch (e) {

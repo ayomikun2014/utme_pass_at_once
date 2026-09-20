@@ -46,7 +46,7 @@ class SettingsProvider extends ChangeNotifier {
 
       _subscription?.cancel();
       _subscription = _service.watchSettings().listen(
-            (updatedSettings) {
+        (updatedSettings) {
           _settings = updatedSettings;
           _applyBackend(updatedSettings);
           notifyListeners();
@@ -66,7 +66,10 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   void _applyBackend(AppSettingsModel s) {
-    BackendApi.applySettings(backendBaseUrl: s.backendBaseUrl, supabaseUrl: s.supabaseUrl);
+    BackendApi.applySettings(
+      backendBaseUrl: s.backendBaseUrl,
+      supabaseUrl: s.supabaseUrl,
+    );
   }
 
   Future<void> refresh() async {
@@ -91,7 +94,7 @@ class SettingsProvider extends ChangeNotifier {
     if (_settings.supportPhones.isEmpty) return null;
 
     return _settings.supportPhones.firstWhere(
-          (phone) => phone.isPrimary,
+      (phone) => phone.isPrimary,
       orElse: () => _settings.supportPhones.first,
     );
   }

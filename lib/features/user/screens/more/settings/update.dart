@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 import 'package:flutter/services.dart'; // For Clipboard
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../../../../core/utils/app_update.dart';
 import 'dart:io';
 
 import '../../../../../core/constants/app_colors.dart';
@@ -55,8 +55,14 @@ class _UpdateScreenState extends State<UpdateScreen> {
     final cleanInstalled = cleanVersion(installed);
     final cleanLatest = cleanVersion(latest);
 
-    final installedParts = cleanInstalled.split('.').map((e) => int.tryParse(e) ?? 0).toList();
-    final latestParts = cleanLatest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final installedParts = cleanInstalled
+        .split('.')
+        .map((e) => int.tryParse(e) ?? 0)
+        .toList();
+    final latestParts = cleanLatest
+        .split('.')
+        .map((e) => int.tryParse(e) ?? 0)
+        .toList();
 
     final maxLen = installedParts.length > latestParts.length
         ? installedParts.length
@@ -89,18 +95,21 @@ class _UpdateScreenState extends State<UpdateScreen> {
         final theme = Theme.of(ctx);
         final isDark = theme.brightness == Brightness.dark;
         return AlertDialog(
-          backgroundColor: isDark ? AppColors.surfaceDark : theme.colorScheme.surface,
+          backgroundColor: isDark
+              ? AppColors.surfaceDark
+              : theme.colorScheme.surface,
           surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 32,
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SizedBox(
-                width: 50,
-                height: 50,
-                child: CustomLoader(),
-              ),
+              const SizedBox(width: 50, height: 50, child: CustomLoader()),
               const SizedBox(height: 24),
               Text(
                 "Checking for updates...",
@@ -149,7 +158,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
           for (final center in centers) {
             final section = user.getSectionForInstitution(exam, center);
-            final baseInstitutionId = exam == 'post_utme' && center.contains('_')
+            final baseInstitutionId =
+                exam == 'post_utme' && center.contains('_')
                 ? center.split('_').first
                 : center;
 
@@ -213,7 +223,6 @@ class _UpdateScreenState extends State<UpdateScreen> {
         });
         CustomToast.show(context, 'Update completed successfully!');
       }
-
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // Close checking dialog on error
@@ -235,11 +244,13 @@ class _UpdateScreenState extends State<UpdateScreen> {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
     final isFreeUser = user == null || !user.isPremiumOnDevice(_deviceId);
-    
+
     final installed = settingsProvider.installedVersion;
     final latest = settingsProvider.latestAppVersion;
     final appUpdateAvailable = _isVersionNewer(installed, latest);
-    final storeUrl = Platform.isIOS ? settingsProvider.appStoreUrl : settingsProvider.playStoreUrl;
+    final storeUrl = Platform.isIOS
+        ? settingsProvider.appStoreUrl
+        : settingsProvider.playStoreUrl;
 
     return Scaffold(
       body: Stack(
@@ -255,20 +266,39 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 centerTitle: true,
               ),
               SliverPadding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
                 sliver: SliverToBoxAdapter(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Circular sync status illustration
-                      _buildSyncStatusIndicator(appUpdateAvailable, isDark, theme),
-                      
+                      _buildSyncStatusIndicator(
+                        appUpdateAvailable,
+                        isDark,
+                        theme,
+                      ),
+
                       // Questions database card
-                      _buildDatabaseSyncCard(context, isFreeUser, isDark, theme),
+                      _buildDatabaseSyncCard(
+                        context,
+                        isFreeUser,
+                        isDark,
+                        theme,
+                      ),
                       const SizedBox(height: 16),
 
                       // App version card
-                      _buildAppUpdateCard(context, installed, latest, storeUrl, isDark, theme),
+                      _buildAppUpdateCard(
+                        context,
+                        installed,
+                        latest,
+                        storeUrl,
+                        isDark,
+                        theme,
+                      ),
                       const SizedBox(height: 16),
 
                       // Device activation info card
@@ -285,7 +315,11 @@ class _UpdateScreenState extends State<UpdateScreen> {
     );
   }
 
-  Widget _buildSyncStatusIndicator(bool appUpdateAvailable, bool isDark, ThemeData theme) {
+  Widget _buildSyncStatusIndicator(
+    bool appUpdateAvailable,
+    bool isDark,
+    ThemeData theme,
+  ) {
     final statusColor = appUpdateAvailable ? Colors.orange : Colors.green;
     return Column(
       children: [
@@ -341,7 +375,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 ],
               ),
               child: Icon(
-                appUpdateAvailable ? Icons.system_update_alt_rounded : Icons.cloud_done_rounded,
+                appUpdateAvailable
+                    ? Icons.system_update_alt_rounded
+                    : Icons.cloud_done_rounded,
                 color: Colors.white,
                 size: 32,
               ),
@@ -377,7 +413,14 @@ class _UpdateScreenState extends State<UpdateScreen> {
     );
   }
 
-  Widget _buildAppUpdateCard(BuildContext context, String installed, String latest, String storeUrl, bool isDark, ThemeData theme) {
+  Widget _buildAppUpdateCard(
+    BuildContext context,
+    String installed,
+    String latest,
+    String storeUrl,
+    bool isDark,
+    ThemeData theme,
+  ) {
     final hasUpdate = _isVersionNewer(installed, latest);
     final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
     final borderColor = isDark
@@ -407,7 +450,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (hasUpdate ? Colors.orange : theme.colorScheme.primary).withValues(alpha: 0.1),
+                  color: (hasUpdate ? Colors.orange : theme.colorScheme.primary)
+                      .withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
@@ -429,10 +473,14 @@ class _UpdateScreenState extends State<UpdateScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      hasUpdate ? 'New version available' : 'You are on the latest version',
+                      hasUpdate
+                          ? 'New version available'
+                          : 'You are on the latest version',
                       style: TextStyle(
                         fontSize: 12,
-                        color: hasUpdate ? Colors.orange.shade700 : Colors.green.shade700,
+                        color: hasUpdate
+                            ? Colors.orange.shade700
+                            : Colors.green.shade700,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -440,9 +488,14 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: (hasUpdate ? Colors.orange : Colors.green).withValues(alpha: 0.1),
+                  color: (hasUpdate ? Colors.orange : Colors.green).withValues(
+                    alpha: 0.1,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -450,7 +503,9 @@ class _UpdateScreenState extends State<UpdateScreen> {
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
-                    color: hasUpdate ? Colors.orange.shade800 : Colors.green.shade800,
+                    color: hasUpdate
+                        ? Colors.orange.shade800
+                        : Colors.green.shade800,
                   ),
                 ),
               ),
@@ -506,23 +561,11 @@ class _UpdateScreenState extends State<UpdateScreen> {
           ),
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () async {
-              if (storeUrl.isNotEmpty) {
-                final Uri url = Uri.parse(storeUrl);
-                if (await canLaunchUrl(url)) {
-                  await launchUrl(
-                    url,
-                    mode: LaunchMode.externalApplication,
-                  );
-                } else {
-                  if (context.mounted) {
-                    CustomToast.show(context, 'Could not open store link.', isError: true);
-                  }
-                }
-              } else {
-                CustomToast.show(context, 'Store link not configured.', isError: true);
-              }
-            },
+            // The shared helper, so this button and the update overlay behave
+            // the same -- including falling back to the store listing when no
+            // link has been set in admin settings.
+            onPressed: () =>
+                launchAppUpdate(context, context.read<SettingsProvider>()),
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: Colors.white,
@@ -534,10 +577,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
             ),
             child: Text(
               hasUpdate ? 'Update App on Play Store' : 'Open Play Store',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
         ],
@@ -545,7 +585,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
     );
   }
 
-  Widget _buildDatabaseSyncCard(BuildContext context, bool isFreeUser, bool isDark, ThemeData theme) {
+  Widget _buildDatabaseSyncCard(
+    BuildContext context,
+    bool isFreeUser,
+    bool isDark,
+    ThemeData theme,
+  ) {
     final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
     final borderColor = isDark
         ? AppColors.dividerDark
@@ -574,11 +619,15 @@ class _UpdateScreenState extends State<UpdateScreen> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (isFreeUser ? Colors.red : Colors.blue).withValues(alpha: 0.1),
+                  color: (isFreeUser ? Colors.red : Colors.blue).withValues(
+                    alpha: 0.1,
+                  ),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(
-                  isFreeUser ? Icons.lock_outline_rounded : Icons.storage_rounded,
+                  isFreeUser
+                      ? Icons.lock_outline_rounded
+                      : Icons.storage_rounded,
                   color: isFreeUser ? Colors.red : Colors.blue,
                   size: 24,
                 ),
@@ -596,14 +645,18 @@ class _UpdateScreenState extends State<UpdateScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isFreeUser 
+                      isFreeUser
                           ? 'Unlock premium to sync latest questions offline'
-                          : (_isUpToDate ? 'Offline content is up-to-date' : 'Sync pending check'),
+                          : (_isUpToDate
+                                ? 'Offline content is up-to-date'
+                                : 'Sync pending check'),
                       style: TextStyle(
                         fontSize: 12,
                         color: isFreeUser
                             ? Colors.red.shade700
-                            : (_isUpToDate ? Colors.green.shade700 : Colors.blue.shade700),
+                            : (_isUpToDate
+                                  ? Colors.green.shade700
+                                  : Colors.blue.shade700),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -645,8 +698,8 @@ class _UpdateScreenState extends State<UpdateScreen> {
             builder: (context, simProvider, child) {
               final isChecking = simProvider.isCheckingUpdates;
               return ElevatedButton.icon(
-                onPressed: isChecking 
-                    ? null 
+                onPressed: isChecking
+                    ? null
                     : () {
                         if (isFreeUser) {
                           Navigator.pushNamed(context, '/store');
@@ -667,34 +720,40 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 ),
                 icon: isFreeUser
                     ? const Icon(Icons.lock_open_rounded, size: 18)
-                    : (isChecking 
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.sync_rounded, size: 18)),
+                    : (isChecking
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.sync_rounded, size: 18)),
                 label: Text(
-                  isFreeUser 
+                  isFreeUser
                       ? 'Unlock Premium to Sync'
-                      : (isChecking ? 'Checking Updates...' : 'Check & Sync Questions'),
+                      : (isChecking
+                            ? 'Checking Updates...'
+                            : 'Check & Sync Questions'),
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
                 ),
               );
-            }
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDeviceInfoCard(BuildContext context, bool isDark, ThemeData theme) {
+  Widget _buildDeviceInfoCard(
+    BuildContext context,
+    bool isDark,
+    ThemeData theme,
+  ) {
     final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
     final borderColor = isDark
         ? AppColors.dividerDark
@@ -754,11 +813,16 @@ class _UpdateScreenState extends State<UpdateScreen> {
                 onTap: _copyDeviceId,
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Colors.red.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: const Row(
                     children: [

@@ -8,7 +8,9 @@ class VersionHelper {
     List<int> v1Parts = v1.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     List<int> v2Parts = v2.split('.').map((e) => int.tryParse(e) ?? 0).toList();
 
-    int maxLength = v1Parts.length > v2Parts.length ? v1Parts.length : v2Parts.length;
+    int maxLength = v1Parts.length > v2Parts.length
+        ? v1Parts.length
+        : v2Parts.length;
 
     for (int i = 0; i < maxLength; i++) {
       int p1 = i < v1Parts.length ? v1Parts[i] : 0;

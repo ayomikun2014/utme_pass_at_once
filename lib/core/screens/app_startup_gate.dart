@@ -26,9 +26,7 @@ class _AppStartupGateState extends State<AppStartupGate> {
         if (settings.isLoading) {
           return Scaffold(
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-            body: const Center(
-              child: _PulsingLogo(),
-            ),
+            body: const Center(child: _PulsingLogo()),
           );
         }
 
@@ -44,7 +42,8 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
         // Force Update Rules
         bool isBelowMin = VersionHelper.isLessThan(installed, min);
-        bool isForcedByLatest = settings.forceUpdate && VersionHelper.isLessThan(installed, latest);
+        bool isForcedByLatest =
+            settings.forceUpdate && VersionHelper.isLessThan(installed, latest);
 
         if (isBelowMin || isForcedByLatest) {
           return const ForceUpdateScreen();
@@ -52,7 +51,9 @@ class _AppStartupGateState extends State<AppStartupGate> {
 
         // Optional Update Logic
         // FIXED: Now respects the 'showUpdatePrompt' toggle from Admin Panel!
-        if (!_dialogShown && settings.showUpdatePrompt && VersionHelper.isLessThan(installed, latest)) {
+        if (!_dialogShown &&
+            settings.showUpdatePrompt &&
+            VersionHelper.isLessThan(installed, latest)) {
           _dialogShown = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -67,7 +68,10 @@ class _AppStartupGateState extends State<AppStartupGate> {
     );
   }
 
-  void _showOptionalUpdateDialog(BuildContext context, SettingsProvider settings) {
+  void _showOptionalUpdateDialog(
+    BuildContext context,
+    SettingsProvider settings,
+  ) {
     final theme = Theme.of(context);
 
     showDialog(
@@ -76,17 +80,26 @@ class _AppStartupGateState extends State<AppStartupGate> {
       builder: (context) => AlertDialog(
         backgroundColor: theme.dialogTheme.backgroundColor,
         title: Text(
-          settings.updateTitle.isNotEmpty ? settings.updateTitle : 'New Version Available',
-          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          settings.updateTitle.isNotEmpty
+              ? settings.updateTitle
+              : 'New Version Available',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: Text(
-          settings.updateMessage.isNotEmpty ? settings.updateMessage : 'A new version of the app is available. Would you like to update?',
+          settings.updateMessage.isNotEmpty
+              ? settings.updateMessage
+              : 'A new version of the app is available. Would you like to update?',
           style: theme.textTheme.bodyMedium,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Later', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            child: Text(
+              'Later',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -97,12 +110,19 @@ class _AppStartupGateState extends State<AppStartupGate> {
               Navigator.pop(context);
               String url = '';
               if (Platform.isAndroid) {
-                url = settings.androidUpdateUrl.isNotEmpty ? settings.androidUpdateUrl : settings.playStoreUrl;
+                url = settings.androidUpdateUrl.isNotEmpty
+                    ? settings.androidUpdateUrl
+                    : settings.playStoreUrl;
               } else if (Platform.isIOS) {
-                url = settings.iosUpdateUrl.isNotEmpty ? settings.iosUpdateUrl : settings.appStoreUrl;
+                url = settings.iosUpdateUrl.isNotEmpty
+                    ? settings.iosUpdateUrl
+                    : settings.appStoreUrl;
               }
               if (url.isNotEmpty) {
-                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                await launchUrl(
+                  Uri.parse(url),
+                  mode: LaunchMode.externalApplication,
+                );
               }
             },
             child: const Text('Update Now'),
@@ -123,7 +143,8 @@ class _PulsingLogo extends StatefulWidget {
   State<_PulsingLogo> createState() => _PulsingLogoState();
 }
 
-class _PulsingLogoState extends State<_PulsingLogo> with SingleTickerProviderStateMixin {
+class _PulsingLogoState extends State<_PulsingLogo>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
   @override

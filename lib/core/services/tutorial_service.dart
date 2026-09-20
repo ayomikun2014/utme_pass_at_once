@@ -62,11 +62,7 @@ class TutorialService {
     navTutorialsKey,
     tutorialTrackKey,
     tutorialSearchKey,
-    if (_hasEClassroom) ...[
-      navEClassroomKey,
-      eclassroomCentersKey,
-      navHomeKey,
-    ],
+    if (_hasEClassroom) ...[navEClassroomKey, eclassroomCentersKey, navHomeKey],
   ];
 
   /// The first stop of each tab, where there is nothing to step back to.
@@ -96,7 +92,10 @@ class TutorialService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String userKey = 'tutorial_completed_${user.uid}';
-      final bool completed = prefs.getBool(userKey) ?? prefs.getBool('tutorial_completed') ?? false;
+      final bool completed =
+          prefs.getBool(userKey) ??
+          prefs.getBool('tutorial_completed') ??
+          false;
 
       // Auto-trigger if not completed
       if (!completed) {
@@ -150,10 +149,9 @@ class TutorialService {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (activeContext.mounted) {
-          ShowCaseWidget.of(activeContext).startShowCase([
-            studyExamCardKey,
-            navTutorialsKey,
-          ]);
+          ShowCaseWidget.of(
+            activeContext,
+          ).startShowCase([studyExamCardKey, navTutorialsKey]);
         }
       });
     });
@@ -187,10 +185,9 @@ class TutorialService {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (activeContext.mounted) {
-          ShowCaseWidget.of(activeContext).startShowCase([
-            eclassroomCentersKey,
-            navHomeKey,
-          ]);
+          ShowCaseWidget.of(
+            activeContext,
+          ).startShowCase([eclassroomCentersKey, navHomeKey]);
         }
       });
     });
@@ -209,7 +206,8 @@ class TutorialService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final packageInfo = await PackageInfo.fromPlatform();
-      final String currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final String currentVersion =
+          '${packageInfo.version}+${packageInfo.buildNumber}';
 
       final user = auth.currentUser;
       if (user != null) {
@@ -235,7 +233,8 @@ class TutorialService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final packageInfo = await PackageInfo.fromPlatform();
-      final String currentVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final String currentVersion =
+          '${packageInfo.version}+${packageInfo.buildNumber}';
 
       final user = auth.currentUser;
       if (user != null) {
@@ -335,7 +334,18 @@ class TutorialService {
     // padding + icon row + progress + title + body + buttons, plus a little
     // slack so a larger system font never clips the card.
     final height =
-        16 + 34 + 12 + 6 + 14 + titleHeight + 8 + bodyHeight + 16 + 40 + 16 + 10;
+        16 +
+        34 +
+        12 +
+        6 +
+        14 +
+        titleHeight +
+        8 +
+        bodyHeight +
+        16 +
+        40 +
+        16 +
+        10;
     return Size(width, height);
   }
 }
@@ -484,7 +494,10 @@ class _TourCard extends StatelessWidget {
                     icon: const Icon(Icons.arrow_back_rounded, size: 15),
                     label: const Text(
                       'Back',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 const SizedBox(width: 6),

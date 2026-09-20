@@ -69,10 +69,30 @@ class _SplashScreenState extends State<SplashScreen>
       body: Stack(
         children: [
           // 🫧 Bubbles (Optimized with GPU-accelerated Transform)
-          _AnimatedBubble(controller: _controller, size: 40, left: 50, startBottom: -50),
-          _AnimatedBubble(controller: _controller, size: 60, left: 150, startBottom: -50),
-          _AnimatedBubble(controller: _controller, size: 30, left: 250, startBottom: -50),
-          _AnimatedBubble(controller: _controller, size: 50, left: 100, startBottom: -50),
+          _AnimatedBubble(
+            controller: _controller,
+            size: 40,
+            left: 50,
+            startBottom: -50,
+          ),
+          _AnimatedBubble(
+            controller: _controller,
+            size: 60,
+            left: 150,
+            startBottom: -50,
+          ),
+          _AnimatedBubble(
+            controller: _controller,
+            size: 30,
+            left: 250,
+            startBottom: -50,
+          ),
+          _AnimatedBubble(
+            controller: _controller,
+            size: 50,
+            left: 100,
+            startBottom: -50,
+          ),
 
           // 🌟 Main Content
           Center(

@@ -19,14 +19,15 @@ service cloud.firestore {
 
     // An admin who is active and approved.
     //
-    // isApproved defaults to true here on purpose: records created before
-    // approval was tracked do not carry the field, and those admins are real.
-    // What is refused is an explicit false -- which is what self-registration
-    // writes, and what the create rule below now insists on.
+    // Both flags default to true when the field is absent, because the admin
+    // records made before these fields existed do not carry them and those
+    // admins are real. What is refused is an explicit false -- and that is
+    // enough: self-registration writes isApproved: false, and the create rule
+    // below will not accept a record that leaves the field out.
     function isAdmin() {
       return signedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        adminDoc().data.get('isActive', false) == true &&
+        adminDoc().data.get('isActive', true) == true &&
         adminDoc().data.get('isApproved', true) == true &&
         adminDoc().data.get('role', '') != 'pending';
     }
@@ -348,6 +349,13 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+    }
+
+    // What stats/rebuild adds up, so the panel does not have to. Written by
+    // the backend with the service account, which these rules do not apply to.
+    match /dashboard_aggregates/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /audit_logs/{logId} {

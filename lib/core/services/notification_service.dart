@@ -18,7 +18,7 @@ class NotificationService with WidgetsBindingObserver {
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
-  FlutterLocalNotificationsPlugin();
+      FlutterLocalNotificationsPlugin();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isInitialized = false;
@@ -37,8 +37,7 @@ class NotificationService with WidgetsBindingObserver {
       FlutterAppBadgeControl.removeBadge();
 
       // ✅ IMPORTANT FIX: Register background handler
-      FirebaseMessaging.onBackgroundMessage(
-          firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       if (Platform.isAndroid) {
         const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -50,18 +49,21 @@ class NotificationService with WidgetsBindingObserver {
 
         await _localNotifications
             .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+              AndroidFlutterLocalNotificationsPlugin
+            >()
             ?.createNotificationChannel(channel);
       }
 
       const AndroidInitializationSettings androidInit =
-      AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings('@mipmap/ic_launcher');
 
       const DarwinInitializationSettings iosInit =
-      DarwinInitializationSettings();
+          DarwinInitializationSettings();
 
-      const InitializationSettings initSettings =
-      InitializationSettings(android: androidInit, iOS: iosInit);
+      const InitializationSettings initSettings = InitializationSettings(
+        android: androidInit,
+        iOS: iosInit,
+      );
 
       await _localNotifications.initialize(
         initSettings,
@@ -74,15 +76,17 @@ class NotificationService with WidgetsBindingObserver {
       RemoteMessage? initialMessage = await _fcm.getInitialMessage();
       if (initialMessage != null) {
         _handleNotificationTap(
-          jsonEncode(initialMessage.data.isNotEmpty
-              ? initialMessage.data
-              : {"route": null}),
+          jsonEncode(
+            initialMessage.data.isNotEmpty
+                ? initialMessage.data
+                : {"route": null},
+          ),
         );
       }
 
       // ✅ App opened from local notification
-      final details =
-      await _localNotifications.getNotificationAppLaunchDetails();
+      final details = await _localNotifications
+          .getNotificationAppLaunchDetails();
 
       if (details?.didNotificationLaunchApp ?? false) {
         _handleNotificationTap(details?.notificationResponse?.payload);
@@ -108,7 +112,9 @@ class NotificationService with WidgetsBindingObserver {
       // Connectivity restore retry
       NetworkService.instance.connectivityStream.listen((online) {
         if (online && _currentUserId != null) {
-          debugPrint('🌐 [NOTIFICATION] Connectivity restored. Re-registering FCM token for $_currentUserId');
+          debugPrint(
+            '🌐 [NOTIFICATION] Connectivity restored. Re-registering FCM token for $_currentUserId',
+          );
           registerToken(_currentUserId!);
         }
       });
@@ -128,7 +134,8 @@ class NotificationService with WidgetsBindingObserver {
     if (Platform.isAndroid) {
       await _localNotifications
           .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>()
+            AndroidFlutterLocalNotificationsPlugin
+          >()
           ?.requestNotificationsPermission();
     }
   }
@@ -149,13 +156,13 @@ class NotificationService with WidgetsBindingObserver {
           .collection('fcmTokens')
           .doc(token)
           .set({
-        'token': token,
-        'deviceId': deviceId,
-        'platform': Platform.isAndroid ? 'Android' : 'iOS',
-        'deviceInfo': deviceInfo,
-        'isActive': true,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
+            'token': token,
+            'deviceId': deviceId,
+            'platform': Platform.isAndroid ? 'Android' : 'iOS',
+            'deviceInfo': deviceInfo,
+            'isActive': true,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
     } catch (e) {
       debugPrint('Token register error: $e');
     }
@@ -265,22 +272,18 @@ class NotificationService with WidgetsBindingObserver {
           .doc(uid)
           .collection('notifications')
           .add({
-        'title': title,
-        'body': body,
-        'type': type,
-        'createdAt': FieldValue.serverTimestamp(),
-        'isRead': false,
-        'payload': payload,
-        'fcmSent': showLocalPush,
-        'source': 'client',
-      });
+            'title': title,
+            'body': body,
+            'type': type,
+            'createdAt': FieldValue.serverTimestamp(),
+            'isRead': false,
+            'payload': payload,
+            'fcmSent': showLocalPush,
+            'source': 'client',
+          });
 
       if (showLocalPush) {
-        await showPushNotification(
-          title: title,
-          body: body,
-          payload: payload,
-        );
+        await showPushNotification(title: title, body: body, payload: payload);
       }
     } catch (e) {
       debugPrint('In-app notification error: $e');
@@ -317,7 +320,9 @@ class NotificationService with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _currentUserId != null) {
-      debugPrint('🔄 [NOTIFICATION] App resumed. Re-registering FCM token for $_currentUserId');
+      debugPrint(
+        '🔄 [NOTIFICATION] App resumed. Re-registering FCM token for $_currentUserId',
+      );
       registerToken(_currentUserId!);
     }
   }
@@ -326,9 +331,7 @@ class NotificationService with WidgetsBindingObserver {
 /// ✅ REQUIRED BACKGROUND HANDLER
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   debugPrint("Background message: ${message.messageId}");
 }
