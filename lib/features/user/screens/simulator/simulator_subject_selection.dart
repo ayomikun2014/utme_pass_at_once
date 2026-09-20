@@ -61,8 +61,13 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
     if (!widget.isPremium) {
       setState(() {
         _isCenterUnlocked = false;
-        _filteredSubjects = ['aptitude'];
-        _selectedSubjects.add('aptitude');
+        if (widget.examType.toLowerCase() == 'jamb') {
+          _filteredSubjects = ['use_of_english'];
+          _selectedSubjects.add('use_of_english');
+        } else {
+          _filteredSubjects = ['aptitude'];
+          _selectedSubjects.add('aptitude');
+        }
         _isLoading = false;
       });
       _animController.forward();
@@ -91,9 +96,33 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
         setState(() {
           _isCenterUnlocked = true;
           // 2. Use the fresh dynamic list! (Fallback to old widget list just in case)
-          _filteredSubjects = dynamicSubjectIds.isNotEmpty
-              ? dynamicSubjectIds
-              : widget.availableSubjects;
+          var subjects = dynamicSubjectIds.isNotEmpty
+              ? List<String>.from(dynamicSubjectIds)
+              : List<String>.from(widget.availableSubjects);
+
+          if (widget.examType.toLowerCase() == 'jamb') {
+            final englishSubjects = <String>[];
+            final mathSubjects = <String>[];
+            final otherSubjects = <String>[];
+            for (final sub in subjects) {
+              final lower = sub.toLowerCase();
+              if (lower.contains('english') && !lower.contains('literature')) {
+                englishSubjects.add(sub);
+              } else if (lower.contains('math')) {
+                mathSubjects.add(sub);
+              } else {
+                otherSubjects.add(sub);
+              }
+            }
+            otherSubjects.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+            subjects = [
+              ...englishSubjects,
+              ...mathSubjects,
+              ...otherSubjects,
+            ];
+          }
+
+          _filteredSubjects = subjects;
 
           if (widget.examType.toLowerCase() != 'post_utme' && _filteredSubjects.contains('aptitude')) {
             _selectedSubjects.add('aptitude');
@@ -107,7 +136,29 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
       if (mounted) {
         setState(() {
           _isCenterUnlocked = true;
-          _filteredSubjects = widget.availableSubjects; // Fallback
+          var subjects = List<String>.from(widget.availableSubjects);
+          if (widget.examType.toLowerCase() == 'jamb') {
+            final englishSubjects = <String>[];
+            final mathSubjects = <String>[];
+            final otherSubjects = <String>[];
+            for (final sub in subjects) {
+              final lower = sub.toLowerCase();
+              if (lower.contains('english') && !lower.contains('literature')) {
+                englishSubjects.add(sub);
+              } else if (lower.contains('math')) {
+                mathSubjects.add(sub);
+              } else {
+                otherSubjects.add(sub);
+              }
+            }
+            otherSubjects.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+            subjects = [
+              ...englishSubjects,
+              ...mathSubjects,
+              ...otherSubjects,
+            ];
+          }
+          _filteredSubjects = subjects; // Fallback
           _isLoading = false;
         });
         _animController.forward();
@@ -125,6 +176,7 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
     setState(() {
       if (_selectedSubjects.contains(subject)) {
         if (subject == 'aptitude' && widget.examType.toLowerCase() != 'post_utme') return; // Cannot unselect Aptitude unless Post-UTME
+        if (subject == 'use_of_english' && widget.examType.toLowerCase() == 'jamb' && !widget.isPremium) return; // Cannot unselect english for free jamb
         _selectedSubjects.remove(subject);
       } else {
         // Post-UTME has no max subject limit for the selected section
@@ -166,6 +218,31 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
     );
   }
 
+  Widget _buildWatermark() {
+    String? imagePath;
+    if (widget.examType == 'jamb') {
+      imagePath = 'assets/images/jamb.webp';
+    } else if (widget.examType == 'post_utme') {
+      imagePath = 'assets/images/post_utme.webp';
+    }
+
+    if (imagePath == null) return const SizedBox();
+
+    return Positioned.fill(
+      child: Center(
+        child: Opacity(
+          opacity: 0.05,
+          child: Image.asset(
+            imagePath,
+            width: 280,
+            height: 280,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -176,13 +253,16 @@ class _SubjectSelectionScreenState extends State<SubjectSelectionScreen>
       body: Stack(
         children: [
           const BlobBackground(),
+          _buildWatermark(),
           CustomScrollView(
             slivers: [
               CustomAppBar(
                 title: widget.examType.toLowerCase() == 'post_utme' && widget.sectionName != null
                     ? 'Post-UTME ${widget.sectionName}'
                     : 'Select Subjects',
-                subtitle: widget.institutionName,
+                subtitle: widget.examType.toLowerCase() == 'jamb'
+                    ? 'Joint Admissions and Matriculation Board'
+                    : widget.institutionName,
                 isLeading: true,
               ),
 

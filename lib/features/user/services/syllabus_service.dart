@@ -1,17 +1,18 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/config/hive_setup.dart';
 import '../../../core/utils/encryption_helper.dart';
 import '../models/syllabus_model.dart';
+import '../../../core/services/backend_api.dart';
 
 
 class SyllabusService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // --- 1. Fetch Syllabi List from Firestore ---
   Future<List<SyllabusModel>> fetchSyllabi(String examType) async {
@@ -28,54 +29,6 @@ class SyllabusService {
     }
   }
 
-  // --- 1.5. Auto-Sync Storage -> Firestore ---
-// --- 1.5. Auto-Sync Storage -> Firestore ---
-  Future<void> syncSyllabusFromStorage(String examType) async {
-    try {
-      final storageRef = _storage.ref('syllabus/${examType.toLowerCase()}');
-      final ListResult result = await storageRef.listAll();
-
-      for (var ref in result.items) {
-        // Skip non-PDFs if any
-        if (!ref.name.toLowerCase().endsWith('.pdf')) continue;
-
-        // Check if already in Firestore
-        final existing = await _firestore
-            .collection('syllabus')
-            .where('storagePath', isEqualTo: ref.fullPath)
-            .limit(1)
-            .get();
-
-        if (existing.docs.isEmpty) {
-          // --- UPGRADED BULLETPROOF NAMING LOGIC ---
-          // This handles spaces, underscores, dashes, and accidental double spaces perfectly!
-          String name = ref.name
-              .replaceAll(RegExp(r'\.pdf$', caseSensitive: false), '') // Remove .pdf
-              .replaceAll('_', ' ') // Convert underscores to spaces
-              .replaceAll('-', ' ') // Convert dashes to spaces
-              .replaceAll(RegExp(r'\s+'), ' ') // Fix accidental double spaces
-              .trim() // Remove leading/trailing spaces
-              .split(' ')
-              .map((word) {
-            if (word.isEmpty) return '';
-            // Capitalize the first letter of each word
-            return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
-          })
-              .join(' ');
-
-          await _firestore.collection('syllabus').add({
-            'name': name,
-            'examType': examType.toLowerCase(),
-            'storagePath': ref.fullPath,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-          debugPrint("Synced new syllabus: $name");
-        }
-      }
-    } catch (e) {
-      debugPrint("Error syncing storage to firestore: $e");
-    }
-  }
   // --- 2. Download and Cache (with progress) ---
   Stream<double> downloadAndCacheSyllabus(SyllabusModel syllabus) async* {
     // A. Define Local Paths
@@ -89,40 +42,36 @@ class SyllabusService {
       await directory.create(recursive: true);
     }
 
-    // B. Start Firebase Storage Download
-    final ref = _storage.ref(syllabus.storagePath);
-    final tempFilePath = '${appDir.path}/temp_download_${syllabus.id}.pdf';
-    final tempFile = File(tempFilePath);
-    final DownloadTask task = ref.writeToFile(tempFile);
-    
-    // C. Monitor Progress (Firebase Task Snapshot events)
-    await for (TaskSnapshot snapshot in task.snapshotEvents) {
-      // Calculate percentage (0.0 to 1.0)
-      double progress = snapshot.totalBytes > 0 
-          ? snapshot.bytesTransferred / snapshot.totalBytes 
-          : 0.0;
-      
-      yield progress; // Send the percentage back to the provider
-
-      // D. On Success: Encrypt and Update Hive
-      if (snapshot.state == TaskState.success) {
-        // 1. Get the raw bytes from temporary file
-        final Uint8List plainBytes = await tempFile.readAsBytes();
-
-        // 2. Encrypt locally
-        await EncryptionHelper.encryptAndSave(plainBytes, destinationPath);
-        
-        // 3. Delete temporary file
-        if (await tempFile.exists()) {
-            await tempFile.delete();
-        }
-
-        // 4. Update the Syllabus Model status
-        final box = Hive.box<SyllabusModel>(HiveSetup.syllabusBoxName);
-        syllabus.localEncryptedPath = destinationPath;
-        syllabus.isDownloaded = true;
-        await box.put(syllabus.id, syllabus); // Update Hive Box
+    // B. Download from public storage, reporting progress as it arrives.
+    final url = (syllabus.storagePath.startsWith('http'))
+        ? syllabus.storagePath
+        : BackendApi.publicFileUrl(syllabus.storagePath);
+    final client = http.Client();
+    try {
+      final response = await client.send(http.Request('GET', Uri.parse(url)));
+      if (response.statusCode != 200) {
+        throw Exception('Download failed (${response.statusCode}).');
       }
+      final total = response.contentLength ?? 0;
+      final builder = BytesBuilder(copy: false);
+      var received = 0;
+      await for (final chunk in response.stream) {
+        builder.add(chunk);
+        received += chunk.length;
+        yield total > 0 ? received / total : 0.0;
+      }
+
+      // C. Encrypt locally and record it in Hive.
+      final Uint8List plainBytes = builder.takeBytes();
+      await EncryptionHelper.encryptAndSave(plainBytes, destinationPath);
+
+      final box = Hive.box<SyllabusModel>(HiveSetup.syllabusBoxName);
+      syllabus.localEncryptedPath = destinationPath;
+      syllabus.isDownloaded = true;
+      await box.put(syllabus.id, syllabus);
+      yield 1.0;
+    } finally {
+      client.close();
     }
   }
 }

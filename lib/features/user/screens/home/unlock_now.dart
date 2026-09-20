@@ -10,6 +10,7 @@ import 'package:utme_pass_at_once/core/utils/custom_app_bar.dart';
 import 'package:utme_pass_at_once/core/utils/custom_btn.dart';
 import 'package:utme_pass_at_once/core/utils/hero_card.dart';
 import 'package:utme_pass_at_once/core/utils/custom_toast.dart';
+import 'package:utme_pass_at_once/core/utils/institution_logos.dart';
 
 import 'package:utme_pass_at_once/features/auth/providers/auth_provider.dart';
 import 'package:utme_pass_at_once/features/auth/models/user_model.dart';
@@ -66,12 +67,13 @@ class _UnlockNowState extends State<UnlockNow>
     return centerCode.toUpperCase();
   }
 
+  /// The bundled logo when the app ships one, otherwise the record's URL.
+  ///
+  /// The URL on each institution record points at Firebase Storage, which this
+  /// project cannot serve, so OAU's card rendered as an empty coloured block.
   String? _getDisplayCenterLogo(String centerCode) {
     final data = _centerData[centerCode.toLowerCase()];
-    if (data != null && data['logo'] != null) {
-      return data['logo'].toString();
-    }
-    return null;
+    return InstitutionLogos.resolve(centerCode, data?['logo']?.toString());
   }
 
   // Kept for visual reference only (e.g. graying out owned subjects temporarily)
@@ -120,6 +122,35 @@ class _UnlockNowState extends State<UnlockNow>
     }
 
     return [];
+  }
+
+  Widget _buildWatermark(UnlockProvider provider) {
+    if (provider.selectedCenter.isEmpty && provider.availableCenters.isEmpty) {
+      return const SizedBox();
+    }
+
+    String? imagePath;
+    if (provider.examType == 'jamb') {
+      imagePath = 'assets/images/jamb.webp';
+    } else if (provider.examType == 'post_utme') {
+      imagePath = 'assets/images/post_utme.webp';
+    }
+
+    if (imagePath == null) return const SizedBox();
+
+    return Positioned.fill(
+      child: Center(
+        child: Opacity(
+          opacity: 0.05,
+          child: Image.asset(
+            imagePath,
+            width: 280,
+            height: 280,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -186,47 +217,62 @@ class _UnlockNowState extends State<UnlockNow>
           currentStep = _buildPinEntryStep(provider, theme, isDark);
         }
 
-        return Scaffold(
-          body: Stack(
-            children: [
-              const BlobBackground(),
-              CustomScrollView(
-                slivers: [
-                  CustomAppBar(
-                    title: title,
-                    subtitle: subtitle,
-                    isLeading: true,
-                    centerTitle: true,
-                    onLeadingPressed: () {
-                      if (provider.selectedCenter.isNotEmpty) {
-                        provider.resetCenterSelection();
-                      } else if (provider.availableCenters.isNotEmpty) {
-                        provider.resetUnlockState();
-                      } else {
-                        Navigator.pop(context);
-                      }
-                    },
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
+        void handleBack() {
+          if (provider.selectedCenter.isNotEmpty) {
+            if (!provider.isPostUtme) {
+              provider.resetUnlockState();
+            } else {
+              provider.resetCenterSelection();
+            }
+          } else if (provider.availableCenters.isNotEmpty) {
+            provider.resetUnlockState();
+          } else {
+            Navigator.pop(context);
+          }
+        }
+
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, result) {
+            if (didPop) return;
+            handleBack();
+          },
+          child: Scaffold(
+            body: Stack(
+              children: [
+                const BlobBackground(),
+                _buildWatermark(provider),
+                CustomScrollView(
+                  slivers: [
+                    CustomAppBar(
+                      title: title,
+                      subtitle: subtitle,
+                      isLeading: true,
+                      centerTitle: true,
+                      onLeadingPressed: handleBack,
                     ),
-                    sliver:
-                    currentStep is SliverList ||
-                        currentStep is SliverGrid ||
-                        currentStep is SliverPadding ||
-                        currentStep is SliverToBoxAdapter
-                        ? currentStep
-                        : SliverToBoxAdapter(child: currentStep),
-                  ),
-                ],
-              ),
-              if (provider.selectedCenter.isNotEmpty &&
-                  !provider.isPostUtme &&
-                  !provider.isActivationComplete)
-                _buildStickyBottom(provider, authProvider, theme, isDark),
-            ],
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      sliver:
+                      currentStep is SliverList ||
+                          currentStep is SliverGrid ||
+                          currentStep is SliverPadding ||
+                          currentStep is SliverToBoxAdapter
+                          ? currentStep
+                          : SliverToBoxAdapter(child: currentStep),
+                    ),
+                  ],
+                ),
+                if (provider.selectedCenter.isNotEmpty &&
+                    !provider.isPostUtme &&
+                    !provider.isActivationComplete &&
+                    (provider.examType != 'jamb' || provider.isValidSubjectCount))
+                  _buildStickyBottom(provider, authProvider, theme, isDark),
+              ],
+            ),
           ),
         );
       },
@@ -424,7 +470,19 @@ class _UnlockNowState extends State<UnlockNow>
     } catch (e) {
       if (mounted) {
         Navigator.pop(context); // hide loading dialog
-        CustomToast.show(context, 'Error: $e', isError: true);
+        final msg = e.toString();
+        final isNetworkError = msg.contains('unavailable') ||
+            msg.contains('network') ||
+            msg.contains('SocketException') ||
+            msg.contains('TimeoutException') ||
+            msg.contains('deadline');
+        CustomToast.show(
+          context,
+          isNetworkError
+              ? 'No internet connection. Please check your network and try again.'
+              : msg.replaceAll('Exception: ', '').replaceAll('FirebaseException: ', ''),
+          isError: true,
+        );
       }
     }
   }
@@ -1150,6 +1208,8 @@ class _UnlockNowState extends State<UnlockNow>
           final downloadSuccess = await simProvider.downloadActivationData(
             examType: examType,
             institutionId: institutionId,
+            // Only what was just bought comes down.
+            subjects: provider.selectedSubjects,
             sectionId: sectionId,
           );
 
@@ -1357,7 +1417,15 @@ class _CenterCardState extends State<_CenterCard> {
                               ),
                             ),
                           ),
-                        if (widget.imagePath.isNotEmpty)
+                        if (widget.imagePath.startsWith('assets/'))
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Image.asset(
+                              widget.imagePath,
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        else if (widget.imagePath.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: CachedNetworkImage(

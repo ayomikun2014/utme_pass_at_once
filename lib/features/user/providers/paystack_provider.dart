@@ -49,7 +49,7 @@ class PaymentProvider extends ChangeNotifier {
       _setLoading(false);
       return _authorizationUrl != null && _lastReference != null;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = await _friendlyError(e);
       _setLoading(false);
       return false;
     }
@@ -97,7 +97,7 @@ class PaymentProvider extends ChangeNotifier {
         return true;
       } catch (e) {
         if (attempt == 5) {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = await _friendlyError(e);
           _setLoading(false);
           return false;
         }
@@ -108,34 +108,6 @@ class PaymentProvider extends ChangeNotifier {
 
     _setLoading(false);
     return false;
-  }
-
-  Future<bool> recordVoucherUsage({
-    required String voucherCode,
-    required String uid,
-    String? email,
-    String? userName,
-  }) async {
-    _setLoading(true);
-    _errorMessage = '';
-
-    if (!await _checkConnection()) return false;
-
-    try {
-      await _paystackService.recordVoucherUsage(
-        voucherCode: voucherCode,
-        uid: uid,
-        email: email,
-        userName: userName,
-      );
-
-      _setLoading(false);
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
-      _setLoading(false);
-      return false;
-    }
   }
 
   void clearError() {
@@ -156,5 +128,33 @@ class PaymentProvider extends ChangeNotifier {
       return false;
     }
     return true;
+  }
+
+  /// Converts raw exceptions into short, user-friendly messages.
+  Future<String> _friendlyError(Object e) async {
+    final hasInternet = await NetworkService.instance.hasInternet();
+    if (!hasInternet) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    final msg = e.toString();
+
+    // Check for HTTP / socket / Cloud Run / closed billing indicators
+    if (msg.contains('ClientException') ||
+        msg.contains('Failed to fetch') ||
+        msg.contains('503') ||
+        msg.contains('403') ||
+        msg.contains('404') ||
+        msg.contains('Html') ||
+        msg.contains('parser') ||
+        msg.contains('Connection refused') ||
+        msg.contains('SocketException') ||
+        msg.contains('TimeoutException') ||
+        msg.contains('unavailable') ||
+        msg.contains('deadline')) {
+      return 'This service is currently unavailable. Please try again later or contact our support team.';
+    }
+
+    return msg.replaceFirst('Exception: ', '').replaceFirst('FirebaseException: ', '');
   }
 }

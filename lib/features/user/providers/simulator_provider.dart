@@ -147,21 +147,21 @@ class SimulatorProvider extends ChangeNotifier {
         String? sectionId,
       }) async {
     try {
-      // Fast path for free tier aptitude to prevent offline timeout hangs on setup
-      if (!isPremium && subject == 'aptitude') {
-        debugPrint('🌐 [FREE] getAvailableYears: Instantly returning free aptitude years');
+      // Fast path for free tier subjects to prevent offline timeout hangs on setup
+      if (!isPremium) {
+        debugPrint('🌐 [FREE] getAvailableYears: Instantly returning free $subject years');
         try {
           final yearsBox = await Hive.openBox<String>('offline_years');
-          final data = yearsBox.get('free_aptitude_years');
+          final data = yearsBox.get('free_${subject}_years');
           if (data != null) {
             final List<dynamic> decoded = json.decode(data);
             final List<String> years = decoded.map((y) => y.toString()).toList();
             if (years.isNotEmpty) return years;
           }
         } catch (e) {
-          debugPrint('⚠️ Error loading free aptitude years from Hive: $e');
+          debugPrint('⚠️ Error loading free $subject years from Hive: $e');
         }
-        return ['2024', '2023'];
+        return ['2014'];
       }
 
       if (isPremium) {
@@ -230,7 +230,8 @@ class SimulatorProvider extends ChangeNotifier {
   Future<bool> downloadActivationData({
     required String examType,
     required String institutionId,
-    // REMOVED: required List<String> subjects,
+    /// The subjects bought with this package; null downloads every subject.
+    List<String>? subjects,
     String? sectionId,
     bool force = false,
   }) async {
@@ -242,13 +243,15 @@ class SimulatorProvider extends ChangeNotifier {
       _safeNotifyListeners();
 
       debugPrint(
-        '⚡ [ACTIVATION] downloadActivationData called: $examType/$institutionId section=$sectionId force=$force',
+        '⚡ [ACTIVATION] downloadActivationData called: $examType/$institutionId '
+        'section=$sectionId force=$force subjects=${subjects ?? 'all'}',
       );
 
       await _service.downloadAndCacheAllActivationData(
         examType: examType,
         institutionId: institutionId,
-        sectionId: sectionId, // Subjects are now discovered dynamically by the service!
+        subjects: subjects,
+        sectionId: sectionId,
         force: force,
         onProgress: (current, total) {
           _activationProgress = current;
@@ -355,16 +358,17 @@ class SimulatorProvider extends ChangeNotifier {
       _safeNotifyListeners();
 
       // --- SKIP REDUNDANT FREE DOWNLOADS ---
-      if (!isPremium && subjects.length == 1 && subjects.first == 'aptitude') {
-        final year = subjectYears['aptitude'] ?? '2024';
+      if (!isPremium && subjects.length == 1) {
+        final freeSubject = subjects.first;
+        final year = subjectYears[freeSubject] ?? '2014';
         final cached = await _service.areQuestionsCached(
           examType: examType,
           institutionId: institutionId,
           year: year,
-          subject: 'aptitude',
+          subject: freeSubject,
         );
         if (cached) {
-          debugPrint('📦 [FREE] prepareExamQuestions: Free aptitude questions for $year are already cached. Instantly returning.');
+          debugPrint('📦 [FREE] prepareExamQuestions: Free $freeSubject questions for $year are already cached. Instantly returning.');
           _isLoading = false;
           _safeNotifyListeners();
           return true;

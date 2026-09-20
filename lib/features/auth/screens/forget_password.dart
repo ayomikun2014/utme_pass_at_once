@@ -101,8 +101,9 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                               ? 'Sending...'
                               : 'Send Reset Link',
                           backgroundColor: AppColors.primary,
-                          onPressed:
-                          auth.isLoading ? null : _handleSendResetLink,
+                          onPressed: auth.isLoading
+                              ? null
+                              : _handleSendResetLink,
                         );
                       },
                     ),

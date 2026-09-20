@@ -44,6 +44,36 @@ class VideoModel {
     );
   }
 
+  /// The eleven-character YouTube id inside [url], or '' when the link is not
+  /// one this app can play. Handles youtu.be links, watch links, shorts,
+  /// embeds, a bare id, and links typed without their "h".
+  String get youtubeId {
+    var clean = url.trim();
+    if (clean.isEmpty) return '';
+    if (clean.startsWith('ttps://')) {
+      clean = 'https://${clean.substring(7)}';
+    } else if (clean.startsWith('ttp://')) {
+      clean = 'http://${clean.substring(6)}';
+    }
+    if (RegExp(r'^[\w-]{11}$').hasMatch(clean)) return clean;
+
+    final match = RegExp(
+      r'(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?(?:.*&)?v=))([\w-]{11})',
+      caseSensitive: false,
+    ).firstMatch(clean);
+    return match?.group(1) ?? '';
+  }
+
+  bool get isPlayable => youtubeId.isNotEmpty;
+
+  /// YouTube's own still for this video.
+  String get thumbnailUrl =>
+      isPlayable ? 'https://img.youtube.com/vi/$youtubeId/hqdefault.jpg' : '';
+
+  /// The page to open when the video will not play inside the app.
+  String get watchUrl =>
+      isPlayable ? 'https://www.youtube.com/watch?v=$youtubeId' : url;
+
   Map<String, dynamic> toMap() {
     return {
       'title': title,

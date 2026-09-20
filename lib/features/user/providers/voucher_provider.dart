@@ -70,6 +70,40 @@ class VoucherProvider extends ChangeNotifier {
     }
   }
 
+  /// Call off a pending payment so the buyer can start a new one.
+  Future<bool> cancelPurchase({
+    required String transactionId,
+    required String uid,
+    String reason = 'Cancelled by the buyer',
+  }) async {
+    _setLoading(true);
+    _errorMessage = '';
+
+    try {
+      await _voucherService.cancelPurchase(
+        transactionId: transactionId,
+        reason: reason,
+      );
+
+      _cachedPurchases = _cachedPurchases
+          .map((item) => item.id == transactionId
+              ? item.copyWith(status: 'cancelled', failureReason: reason)
+              : item)
+          .toList();
+
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = jsonEncode(_cachedPurchases.map((e) => e.toMap()).toList());
+      await prefs.setString('${_purchasesCacheKey}_$uid', jsonStr);
+
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<bool> hideUserPurchase({
     required String transactionId,
     required String uid,

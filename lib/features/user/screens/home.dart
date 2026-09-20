@@ -83,8 +83,10 @@ class _HomeState extends State<Home> {
                     actions: [
                       TutorialService.instance.buildShowcase(
                         key: TutorialService.instance.settingsKey,
-                        title: 'Preferences & Help ⚙️',
-                        description: 'Access settings to change your theme, configure notifications, contact support, or replay this tour.',
+                        icon: Icons.settings_rounded,
+                        accent: const Color(0xFF6366F1),
+                        title: 'Settings and help',
+                        description: 'Switch between light and dark, choose which alerts you get, reach support, or play this tour again.',
                         context: context,
                         isCircleBorder: true,
                         child: IconButton(
@@ -140,7 +142,7 @@ class _HomeState extends State<Home> {
     final isDark = theme.brightness == Brightness.dark;
 
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 4),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
               (context, index) {
@@ -221,8 +223,10 @@ class _HomeState extends State<Home> {
             if (index == 0) {
               card = TutorialService.instance.buildShowcase(
                 key: TutorialService.instance.newsKey,
-                title: 'Latest Updates 📰',
-                description: 'Stay informed with real-time news updates, exam schedules, and academic tips directly on your feed.',
+                icon: Icons.newspaper_rounded,
+                accent: const Color(0xFF7C3AED),
+                title: 'Education news',
+                description: 'JAMB, WAEC and NECO news as it breaks: exam dates, admission lists and study tips. Tap a story to read it in full.',
                 context: context,
                 child: card,
               );
@@ -256,7 +260,7 @@ class _HomeState extends State<Home> {
       }) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+        padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 20, bottom: 4),
         child: Row(
           children: [
             Text(
@@ -276,7 +280,26 @@ class _HomeState extends State<Home> {
                     Navigator.pushNamed(context, route);
                   }
                 },
-                child: Text(btnText ?? 'View All'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      btnText ?? 'View All',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_forward_rounded, size: 14),
+                  ],
+                ),
               ),
           ],
         ),
@@ -312,6 +335,7 @@ class _HomeState extends State<Home> {
                       }
                     },
                     title: feature.title,
+                    subtitle: feature.subtitle,
                     route: feature.route,
                     baseColor: feature.baseColor,
                     icon: feature.icon,
@@ -322,8 +346,10 @@ class _HomeState extends State<Home> {
                   if (index == 0) {
                     card = TutorialService.instance.buildShowcase(
                        key: TutorialService.instance.quickLinksKey,
-                       title: 'Quick Navigation ⚡',
-                       description: 'Quickly access the Exam Store, check your Purchase History, chat with Cognita AI, or read announcements.',
+                       icon: Icons.bolt_rounded,
+                       accent: const Color(0xFF0EA5E9),
+                       title: 'Quick links',
+                       description: 'Buy an activation code, check your orders, open your study notes or ask the AI tutor -- all one tap from here.',
                        context: context,
                        child: card,
                      );
@@ -482,10 +508,16 @@ class _ExamCategorySliderState extends State<_ExamCategorySlider> {
         String? sectionId,
       }) {
     final provider = context.read<SimulatorProvider>();
+    // The package records which subjects were bought; only those are fetched.
+    final user = context.read<AuthProvider>().currentUser;
+    final centerKey = (sectionId != null && sectionId.trim().isNotEmpty)
+        ? '${institutionId.toLowerCase()}_${sectionId.toLowerCase()}'
+        : institutionId.toLowerCase();
 
     final downloadFuture = provider.downloadActivationData(
       examType: examType,
       institutionId: institutionId,
+      subjects: user?.getSubjectsForCenter(examType, centerKey),
       sectionId: sectionId,
     );
 
@@ -661,7 +693,7 @@ class _ExamCategorySliderState extends State<_ExamCategorySlider> {
         'image': 'assets/images/jamb.webp',
         'route': '/exam_dashboard',
         'examType': 'jamb',
-        'isAvailable': false,
+        'isAvailable': true,
       },
       {
         'title': 'WAEC',
@@ -688,8 +720,10 @@ class _ExamCategorySliderState extends State<_ExamCategorySlider> {
     return SliverToBoxAdapter(
       child: TutorialService.instance.buildShowcase(
         key: TutorialService.instance.examSliderKey,
-        title: 'Start Practicing 🎯',
-        description: 'Choose your preferred exam category (JAMB, WAEC, NECO, or Post-UTME) to select subjects and start simulation!',
+        icon: Icons.school_rounded,
+        accent: AppColors.primary,
+        title: 'Pick your exam',
+        description: 'Choose JAMB, WAEC, NECO or Post-UTME. Once an exam is activated you practise it offline, exactly like the real CBT.',
         context: context,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

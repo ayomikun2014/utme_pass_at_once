@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:utme_pass_at_once/core/utils/custom_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -74,7 +75,7 @@ class _ChangePasswordState extends State<ChangePassword> {
           24,
           16,
           24,
-          MediaQuery.of(context).padding.bottom + 16,
+          math.max(24.0, MediaQuery.of(context).padding.bottom + 16.0),
         ),
         decoration: BoxDecoration(
           color: isDark ? AppColors.surfaceDark : theme.colorScheme.surface,

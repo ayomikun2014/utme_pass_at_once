@@ -29,4 +29,22 @@ class AnnouncementModel {
       'createdAt': FieldValue.serverTimestamp(),
     };
   }
+
+  Map<String, dynamic> toLocalMap() {
+    return {
+      'id': id,
+      'title': title,
+      'description': description,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
+  factory AnnouncementModel.fromLocalMap(Map<String, dynamic> data) {
+    return AnnouncementModel(
+      id: data['id'] ?? '',
+      title: data['title'] ?? '',
+      description: data['description'] ?? '',
+      createdAt: DateTime.tryParse(data['createdAt']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
 }

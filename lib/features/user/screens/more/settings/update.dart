@@ -12,6 +12,7 @@ import '../../../../../core/utils/custom_app_bar.dart';
 import '../../../../../core/providers/settings_provider.dart';
 import '../../../../auth/providers/auth_provider.dart';
 import '../../../providers/simulator_provider.dart';
+import '../../../services/simulator_service.dart';
 import '../../../utils/activation_bottom_sheet.dart';
 
 class UpdateScreen extends StatefulWidget {
@@ -40,6 +41,34 @@ class _UpdateScreenState extends State<UpdateScreen> {
       });
       // Retrieve last updated date from local storage or set initial mock state
     });
+  }
+
+  bool _isVersionNewer(String installed, String latest) {
+    String cleanVersion(String v) {
+      final idx = v.indexOf(RegExp(r'[-+]'));
+      if (idx != -1) {
+        return v.substring(0, idx).trim();
+      }
+      return v.trim();
+    }
+
+    final cleanInstalled = cleanVersion(installed);
+    final cleanLatest = cleanVersion(latest);
+
+    final installedParts = cleanInstalled.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final latestParts = cleanLatest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+
+    final maxLen = installedParts.length > latestParts.length
+        ? installedParts.length
+        : latestParts.length;
+
+    for (int i = 0; i < maxLen; i++) {
+      final installedPart = i < installedParts.length ? installedParts[i] : 0;
+      final latestPart = i < latestParts.length ? latestParts[i] : 0;
+      if (latestPart > installedPart) return true;
+      if (latestPart < installedPart) return false;
+    }
+    return false;
   }
 
   Future<void> _handleUpdateQuestions() async {
@@ -96,6 +125,20 @@ class _UpdateScreenState extends State<UpdateScreen> {
 
     try {
       bool updatesFound = false;
+      final isFreeUser = !user.isPremiumOnDevice(_deviceId);
+
+      // --- FREE USER: Re-sync free questions ---
+      if (isFreeUser) {
+        await SimulatorService().predownloadFreeQuestions();
+        if (!mounted) return;
+        Navigator.pop(context);
+        CustomToast.show(context, 'Free questions synced successfully!');
+        setState(() {
+          _isUpToDate = true;
+          _lastUpdated = 'Just now';
+        });
+        return;
+      }
 
       // 2. Iterate through all active exam types to check for updates (force checks from server)
       final activeExams = ['post_utme', 'waec', 'jamb', 'neco'];
@@ -128,6 +171,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
               final downloadFuture = simProvider.downloadActivationData(
                 examType: exam,
                 institutionId: baseInstitutionId,
+                subjects: user.getSubjectsForCenter(exam, center),
                 sectionId: section?['id'],
                 force: true,
               );
@@ -194,7 +238,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
     
     final installed = settingsProvider.installedVersion;
     final latest = settingsProvider.latestAppVersion;
-    final appUpdateAvailable = installed != latest;
+    final appUpdateAvailable = _isVersionNewer(installed, latest);
     final storeUrl = Platform.isIOS ? settingsProvider.appStoreUrl : settingsProvider.playStoreUrl;
 
     return Scaffold(
@@ -219,12 +263,12 @@ class _UpdateScreenState extends State<UpdateScreen> {
                       // Circular sync status illustration
                       _buildSyncStatusIndicator(appUpdateAvailable, isDark, theme),
                       
-                      // App version card
-                      _buildAppUpdateCard(context, installed, latest, storeUrl, isDark, theme),
-                      const SizedBox(height: 16),
-
                       // Questions database card
                       _buildDatabaseSyncCard(context, isFreeUser, isDark, theme),
+                      const SizedBox(height: 16),
+
+                      // App version card
+                      _buildAppUpdateCard(context, installed, latest, storeUrl, isDark, theme),
                       const SizedBox(height: 16),
 
                       // Device activation info card
@@ -334,7 +378,7 @@ class _UpdateScreenState extends State<UpdateScreen> {
   }
 
   Widget _buildAppUpdateCard(BuildContext context, String installed, String latest, String storeUrl, bool isDark, ThemeData theme) {
-    final hasUpdate = installed != latest;
+    final hasUpdate = _isVersionNewer(installed, latest);
     final bgColor = isDark ? AppColors.surfaceDark : theme.colorScheme.surface;
     final borderColor = isDark
         ? AppColors.dividerDark

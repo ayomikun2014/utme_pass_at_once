@@ -25,6 +25,27 @@ class VoucherService {
     }
   }
 
+  /// Call off a payment that has not produced a code yet.
+  ///
+  /// Only the status is changed, which is all the rules let a buyer touch on
+  /// their own transaction. If the money did arrive after all, the Paystack
+  /// notice still generates the code -- cancelling here never loses a payment.
+  Future<void> cancelPurchase({
+    required String transactionId,
+    required String reason,
+  }) async {
+    try {
+      await _db.collection('payment_transactions').doc(transactionId).update({
+        'status': 'cancelled',
+        'failureReason': reason,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('❌ cancelPurchase error: $e');
+      rethrow;
+    }
+  }
+
   Future<void> hideUserPurchase({
     required String transactionId,
     required String uid,

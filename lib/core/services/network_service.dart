@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'dart:math';
 
 class NetworkService with WidgetsBindingObserver {
   NetworkService._();
@@ -114,13 +113,11 @@ class NetworkService with WidgetsBindingObserver {
     }
   }
 
-  /// Manual check helper
+  /// Manual check helper that also updates the internal state
   Future<bool> hasInternet() async {
-    final results = await _connectivity.checkConnectivity();
-    if (results.contains(ConnectivityResult.none)) {
-      return await _checkActualInternet();
-    }
-    return await _checkActualInternet();
+    final online = await _checkActualInternet();
+    _setOnlineState(online);
+    return online;
   }
 
   void dispose() {
@@ -128,30 +125,33 @@ class NetworkService with WidgetsBindingObserver {
     _controller.close();
   }
 
-  // --- FUNNY OFFLINE HELPERS ---
-
-  final List<String> _funnyMessages = [
-    "Oops! Your internet is playing hide and seek. 🙈",
-    "Whoa! It seems your connection took a coffee break. ☕",
-    "No signal! Are we in a tunnel or just really unlucky? 🚇",
-    "Internet is down. Time to talk to real people? (Just kidding!) 😅",
-    "Your Wi-Fi went for a walk. 🚶‍♂️ It'll be back soon!",
-    "Oh no! The internet went on vacation! 🏖️",
-    "Lost in the digital wilderness? No signal found! 🌲",
-  ];
-
-  /// Show a funny SnackBar when a user clicks a network-required feature while offline
+  /// Show a professional SnackBar when a user clicks a network-required feature while offline
   void showNoInternetHelper(BuildContext context) {
-    final message = _funnyMessages[Random().nextInt(_funnyMessages.length)];
-    
-    CustomToast.show(context, message);
+    CustomToast.show(
+      context,
+      "Connection failed. Please check your internet or connect to the internet.",
+      isError: true,
+    );
   }
 
-  /// Run an action ONLY if online, otherwise show the funny helper
-  void runWithNetwork(BuildContext context, VoidCallback action) {
-    if (isOnline) {
+  /// Run an action ONLY if online, otherwise show the no internet helper.
+  /// If we currently think we are offline, perform a fast background lookup to ensure the state isn't stale.
+  Future<void> runWithNetwork(BuildContext context, VoidCallback action) async {
+    bool activeOnline = _isOnline;
+    if (!activeOnline) {
+      activeOnline = await _checkActualInternet().timeout(
+        const Duration(milliseconds: 1500),
+        onTimeout: () => false,
+      );
+      if (activeOnline) {
+        _setOnlineState(true);
+      }
+    }
+
+    if (activeOnline) {
       action();
     } else {
+      if (!context.mounted) return;
       showNoInternetHelper(context);
     }
   }

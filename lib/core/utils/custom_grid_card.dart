@@ -6,6 +6,7 @@ class CustomGridCard extends StatelessWidget {
   const CustomGridCard({
     super.key,
     required this.title,
+    this.subtitle,
     required this.route,
     required this.baseColor,
     this.icon,
@@ -16,6 +17,7 @@ class CustomGridCard extends StatelessWidget {
   });
 
   final String title;
+  final String? subtitle;
   final String route;
   final Color baseColor;
   final IconData? icon;
@@ -95,14 +97,31 @@ class CustomGridCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      // FIXED: Using theme for dynamic text color
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      if (subtitle != null && subtitle!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          subtitle!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
                   ),
                   Container(
                     width: 45,

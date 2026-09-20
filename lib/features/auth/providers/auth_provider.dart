@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../models/device_lock_exception.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // NEW: Required for _firestore
 import 'package:firebase_auth/firebase_auth.dart'; // NEW: Required for providerData checks
@@ -14,10 +16,14 @@ class AuthProvider extends ChangeNotifier {
   // NEW: Initialize the Firestore object for the updateProfile method
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>?
+  _userDocSubscription;
+
   UserModel? _currentUser;
   String _currentDeviceId = '';
   bool _isLoading = false;
   String _errorMessage = '';
+  DeviceLockException? _deviceLock;
 
   // ---------------------------------------------------------------------------
   // GETTERS
@@ -25,6 +31,11 @@ class AuthProvider extends ChangeNotifier {
   UserModel? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
   String get errorMessage => _errorMessage;
+
+  /// Set when a sign-in was refused because the account belongs to another
+  /// phone. The sign-in screen asks whether to move it rather than showing an
+  /// error and leaving the reader stuck.
+  DeviceLockException? get pendingDeviceLock => _deviceLock;
   bool get isLoggedIn => _currentUser != null;
   String get currentDeviceId => _currentDeviceId;
 
@@ -78,6 +89,7 @@ class AuthProvider extends ChangeNotifier {
 
       _currentUser = await _authService.tryAutoLogin();
       if (_currentUser != null) {
+        _listenToUserDoc(_currentUser!.uid);
         NotificationService.instance.initialize();
         NotificationService.instance.registerToken(_currentUser!.uid);
 
@@ -86,8 +98,8 @@ class AuthProvider extends ChangeNotifier {
         // DeviceHelper fix (old code used androidInfo.id which was just a build string).
         await _migrateDeviceIdIfNeeded();
 
-        // Download free aptitude offline questions in the background
-        SimulatorService().predownloadFreeAptitudeQuestions();
+        // Download free offline questions in the background
+        SimulatorService().predownloadFreeQuestions();
 
         notifyListeners();
         return true;
@@ -111,11 +123,42 @@ class AuthProvider extends ChangeNotifier {
     try {
       _currentUser = await _authService.login(email, password);
       if (_currentUser != null) {
+        _listenToUserDoc(_currentUser!.uid);
         NotificationService.instance.registerToken(_currentUser!.uid);
-        // Download free aptitude offline questions in the background
-        SimulatorService().predownloadFreeAptitudeQuestions();
+        // Download free offline questions in the background
+        SimulatorService().predownloadFreeQuestions();
       } else {
-        _errorMessage = 'User profile data is missing. Please sign up again or contact support.';
+        _errorMessage =
+            'User profile data is missing. Please sign up again or contact support.';
+      }
+      _setLoading(false);
+      return _currentUser != null;
+    } on DeviceLockException catch (e) {
+      _deviceLock = e;
+      _errorMessage = e.toString();
+      _setLoading(false);
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  /// Finish a sign-in that was held up by the device lock, binding the account
+  /// to this phone. The previous phone is signed out the next time it checks.
+  Future<bool> moveAccountToThisDevice() async {
+    final lock = _deviceLock;
+    if (lock == null) return false;
+    _clearError();
+    _setLoading(true);
+    try {
+      _currentUser = await _authService.moveAccountToThisDevice(lock.uid);
+      _deviceLock = null;
+      if (_currentUser != null) {
+        _listenToUserDoc(_currentUser!.uid);
+        NotificationService.instance.registerToken(_currentUser!.uid);
+        SimulatorService().predownloadFreeQuestions();
       }
       _setLoading(false);
       return _currentUser != null;
@@ -126,11 +169,21 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Give up on a held-up sign-in and end the session.
+  Future<void> cancelDeviceMove() async {
+    _deviceLock = null;
+    await logout();
+  }
+
   // ---------------------------------------------------------------------------
   // EMAIL SIGN UP
   // ---------------------------------------------------------------------------
   Future<bool> signUp(
-      String email, String password, String name, String phone) async {
+    String email,
+    String password,
+    String name,
+    String phone,
+  ) async {
     _clearError();
     _setLoading(true);
     if (!await _checkConnection()) return false;
@@ -142,9 +195,10 @@ class AuthProvider extends ChangeNotifier {
         phone: phone,
       );
       if (_currentUser != null) {
+        _listenToUserDoc(_currentUser!.uid);
         NotificationService.instance.registerToken(_currentUser!.uid);
-        // Download free aptitude offline questions in the background
-        SimulatorService().predownloadFreeAptitudeQuestions();
+        // Download free offline questions in the background
+        SimulatorService().predownloadFreeQuestions();
       } else {
         _errorMessage = 'Failed to create user profile. Please try again.';
       }
@@ -167,14 +221,19 @@ class AuthProvider extends ChangeNotifier {
     try {
       _currentUser = await _authService.signInWithGoogle();
       if (_currentUser != null) {
+        _listenToUserDoc(_currentUser!.uid);
         NotificationService.instance.registerToken(_currentUser!.uid);
-        // Download free aptitude offline questions in the background
-        SimulatorService().predownloadFreeAptitudeQuestions();
-      } else {
-        _errorMessage = 'User profile data is missing. Please sign up again or contact support.';
+        // Download free offline questions in the background
+        SimulatorService().predownloadFreeQuestions();
       }
+      // No user and no error means the reader closed the Google picker.
       _setLoading(false);
       return _currentUser != null;
+    } on DeviceLockException catch (e) {
+      _deviceLock = e;
+      _errorMessage = e.toString();
+      _setLoading(false);
+      return false;
     } catch (e) {
       _errorMessage = e.toString().replaceAll('Exception: ', '');
       _setLoading(false);
@@ -203,7 +262,9 @@ class AuthProvider extends ChangeNotifier {
   // CHANGE PASSWORD
   // ---------------------------------------------------------------------------
   Future<bool> changePassword(
-      String currentPassword, String newPassword) async {
+    String currentPassword,
+    String newPassword,
+  ) async {
     _clearError();
     _setLoading(true);
     try {
@@ -238,7 +299,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // UPDATE PROFILE (Offline-Resilient Version)
   // ---------------------------------------------------------------------------
   Future<bool> updateProfile(Map<String, dynamic> updates) async {
@@ -248,7 +309,8 @@ class AuthProvider extends ChangeNotifier {
       // 1. OPTIMISTIC UPDATE: Apply changes to the in-memory model immediately
       //    This ensures the UI updates instantly even when offline.
       final currentData = _currentUser!.toMap();
-      final mergedData = Map<String, dynamic>.from(currentData)..addAll(updates);
+      final mergedData = Map<String, dynamic>.from(currentData)
+        ..addAll(updates);
       // FieldValue.serverTimestamp() can't be deserialized by fromMap() —
       // replace with the current DateTime so the model can be reconstructed.
       mergedData['createdAt'] = Timestamp.fromDate(_currentUser!.createdAt);
@@ -257,11 +319,15 @@ class AuthProvider extends ChangeNotifier {
 
       // 2. BACKGROUND SYNC: Send update to Firestore.
       //    Firestore SDK will queue this write locally and sync when online.
-      _firestore.collection('users').doc(_currentUser!.uid).update(updates).catchError((e) {
-        debugPrint('⚠️ [PROFILE] Background Firestore sync failed: $e');
-        // The local Firestore cache still has the pending write,
-        // it will retry automatically when connectivity returns.
-      });
+      _firestore
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .update(updates)
+          .catchError((e) {
+            debugPrint('⚠️ [PROFILE] Background Firestore sync failed: $e');
+            // The local Firestore cache still has the pending write,
+            // it will retry automatically when connectivity returns.
+          });
 
       return true;
     } catch (e) {
@@ -282,8 +348,9 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
 
       debugPrint("✅ DEBUG: Fresh user fetched successfully!");
-      debugPrint("✅ DEBUG: Downloaded Selections: ${_currentUser?.examSelections}");
-
+      debugPrint(
+        "✅ DEBUG: Downloaded Selections: ${_currentUser?.examSelections}",
+      );
     } catch (e) {
       // If this prints, your Hive adapter or Firestore read is crashing!
       debugPrint("💥 DEBUG: FAILED TO REFRESH USER: $e");
@@ -299,6 +366,8 @@ class AuthProvider extends ChangeNotifier {
   // LOGOUT
   // ---------------------------------------------------------------------------
   Future<void> logout() async {
+    _userDocSubscription?.cancel();
+    _userDocSubscription = null;
     if (_currentUser != null) {
       await NotificationService.instance.removeToken(_currentUser!.uid);
     }
@@ -322,7 +391,8 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> _checkConnection() async {
     final isOnline = await NetworkService.instance.hasInternet();
     if (!isOnline) {
-      _errorMessage = 'No internet connection. Please check your network and try again.';
+      _errorMessage =
+          'Connection failed. Please check your internet or connect to the internet.';
       _setLoading(false);
       return false;
     }
@@ -346,11 +416,13 @@ class AuthProvider extends ChangeNotifier {
     // If user has no premium access at all, just update the top-level deviceId
     if (!_currentUser!.isPremium) {
       debugPrint('📱 [MIGRATION] Non-premium user, updating deviceId only');
-      _firestore.collection('users').doc(_currentUser!.uid).update({
-        'deviceId': _currentDeviceId,
-      }).catchError((e) {
-        debugPrint('⚠️ [MIGRATION] Failed to update deviceId: $e');
-      });
+      _firestore
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .update({'deviceId': _currentDeviceId})
+          .catchError((e) {
+            debugPrint('⚠️ [MIGRATION] Failed to update deviceId: $e');
+          });
       return;
     }
 
@@ -360,9 +432,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       // Build the update map for all exam selections
-      final Map<String, dynamic> updates = {
-        'deviceId': _currentDeviceId,
-      };
+      final Map<String, dynamic> updates = {'deviceId': _currentDeviceId};
 
       // Update the deviceId inside each examSelection entry
       final selections = _currentUser!.examSelections;
@@ -373,7 +443,10 @@ class AuthProvider extends ChangeNotifier {
         }
       }
 
-      await _firestore.collection('users').doc(_currentUser!.uid).update(updates);
+      await _firestore
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .update(updates);
 
       // Refresh user model so in-memory data reflects the new ID
       _currentUser = await _authService.forceRefreshUser();
@@ -384,5 +457,54 @@ class AuthProvider extends ChangeNotifier {
       // Non-fatal — the user can still use the app, just might see
       // "different device" dialog until next successful migration
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // REAL-TIME USER DOCUMENT LISTENER
+  // Subscribes to changes in /users/{uid} in Firestore.
+  // Uses Firestore's built-in offline cache: when online a server push arrives
+  // immediately; when offline the local cache is used. This costs exactly ONE
+  // persistent listener per session — no polling.
+  // ---------------------------------------------------------------------------
+  void _listenToUserDoc(String uid) {
+    // Cancel any existing subscription before starting a new one
+    _userDocSubscription?.cancel();
+
+    _userDocSubscription = _firestore
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!snapshot.exists || snapshot.data() == null) return;
+
+            final updatedUser = UserModel.fromMap(snapshot.data()!, uid);
+
+            // Only notify if something actually changed, avoiding unnecessary rebuilds
+            if (_currentUser?.isActive != updatedUser.isActive ||
+                _currentUser?.isPremiumGlobal != updatedUser.isPremiumGlobal ||
+                _currentUser?.displayName != updatedUser.displayName ||
+                _currentUser?.examSelections.toString() !=
+                    updatedUser.examSelections.toString()) {
+              _currentUser = updatedUser;
+              notifyListeners();
+              debugPrint(
+                '🔄 [AUTH] User doc updated from Firestore stream (isActive=${updatedUser.isActive})',
+              );
+            }
+          },
+          onError: (e) {
+            debugPrint('⚠️ [AUTH] User doc stream error: $e');
+          },
+        );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DISPOSE
+  // ---------------------------------------------------------------------------
+  @override
+  void dispose() {
+    _userDocSubscription?.cancel();
+    super.dispose();
   }
 }

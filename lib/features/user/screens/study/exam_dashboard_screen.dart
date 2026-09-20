@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/utils/institution_logos.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/bg.dart';
 import '../../../../core/utils/custom_app_bar.dart';
@@ -86,7 +87,10 @@ class ExamDashboardScreen extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
-                  logoUrl: logoUrl,
+                  // Bundled logos first, then whatever the record carries.
+                  logoUrl: examType.toLowerCase() == 'jamb'
+                      ? 'assets/images/jamb.webp'
+                      : InstitutionLogos.resolve(schoolId, logoUrl),
                   color: accentColor.withValues(alpha: 0.9),
                   isLeading: true,
                   centerTitle: true,
@@ -108,6 +112,7 @@ class ExamDashboardScreen extends StatelessWidget {
                           child: FadeInAnimation(
                             child: CustomGridCard(
                               title: feature.title,
+                              subtitle: feature.subtitle,
                               route: feature.route,
                               baseColor: feature.baseColor,
                               icon: feature.icon,
@@ -120,12 +125,12 @@ class ExamDashboardScreen extends StatelessWidget {
                       );
                     }, childCount: dashboardItems.length),
                     gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 1.1,
-                    ),
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          childAspectRatio: 1.1,
+                        ),
                   ),
                 ),
                 // Bottom padding to clear floating nav bar

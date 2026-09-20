@@ -13,7 +13,14 @@ class UserModel {
   Map<String, dynamic> get examSelections =>
       _examSelections ?? <String, dynamic>{};
   final DateTime premiumExpiryDate;
-  final bool isPremium;
+  final bool isPremiumGlobal;
+
+  bool get isPremium {
+    if (isPremiumGlobal && premiumExpiryDate.isAfter(DateTime.now()))
+      return true;
+    return hasAnyActiveExam();
+  }
+
   final String? deviceId;
   final Map<String, dynamic>? deviceInfo;
 
@@ -41,7 +48,7 @@ class UserModel {
     required this.createdAt,
     Map<String, dynamic>? examSelections,
     required this.premiumExpiryDate,
-    this.isPremium = false,
+    bool isPremium = false,
     this.deviceId,
     this.deviceInfo,
 
@@ -56,7 +63,8 @@ class UserModel {
     this.referredBy,
     this.referredCenters = const {},
     this.suspendedCenters = const {},
-  }) : _examSelections = examSelections ?? <String, dynamic>{};
+  }) : isPremiumGlobal = isPremium,
+       _examSelections = examSelections ?? <String, dynamic>{};
 
   factory UserModel.fromMap(Map<String, dynamic> data, String documentId) {
     return UserModel(
@@ -105,7 +113,7 @@ class UserModel {
       'createdAt': FieldValue.serverTimestamp(),
       'examSelections': examSelections,
       'premiumExpiryDate': Timestamp.fromDate(premiumExpiryDate),
-      'isPremium': isPremium,
+      'isPremium': isPremiumGlobal,
       'deviceId': deviceId,
       'deviceInfo': deviceInfo,
 
@@ -124,8 +132,9 @@ class UserModel {
   }
 
   bool isPremiumOnDevice(String currentDeviceId) {
-    // FIXED: Global premium check (only grant if active, do NOT block if expired)
-    if (isPremium && premiumExpiryDate.isAfter(DateTime.now())) return true;
+    // Only grant globally if they have a global premium override
+    if (isPremiumGlobal && premiumExpiryDate.isAfter(DateTime.now()))
+      return true;
 
     for (final entry in examSelections.values) {
       if (entry is Map && entry['deviceId'] == currentDeviceId) return true;
@@ -134,11 +143,7 @@ class UserModel {
   }
 
   bool hasActiveExam(String examName, String currentDeviceId) {
-    // FIXED: Global premium check
-    if (isPremium && premiumExpiryDate.isAfter(DateTime.now())) return true;
-
     String normalized = examName.toLowerCase().trim();
-
 
     final selection = examSelections[normalized];
     if (selection is Map && selection['deviceId'] == currentDeviceId) {
@@ -148,7 +153,9 @@ class UserModel {
         for (final inst in institutions.values) {
           if (inst is Map) {
             if (inst['expiresAt'] != null) {
-              final expiresAt = inst['expiresAt'] as DateTime;
+              final expiresAt = inst['expiresAt'] is DateTime
+                  ? inst['expiresAt'] as DateTime
+                  : (inst['expiresAt'] as Timestamp).toDate();
               if (expiresAt.isAfter(DateTime.now())) {
                 return true; // Found an active one!
               }
@@ -163,11 +170,7 @@ class UserModel {
   }
 
   bool isPremiumForExamAnyDevice(String examName) {
-    // FIXED: Global premium check
-    if (isPremium && premiumExpiryDate.isAfter(DateTime.now())) return true;
-
     String normalized = examName.toLowerCase().trim();
-
 
     final selection = examSelections[normalized];
     if (selection is Map && selection.containsKey('deviceId')) {
@@ -177,7 +180,9 @@ class UserModel {
         for (final inst in institutions.values) {
           if (inst is Map) {
             if (inst['expiresAt'] != null) {
-              final expiresAt = inst['expiresAt'] as DateTime;
+              final expiresAt = inst['expiresAt'] is DateTime
+                  ? inst['expiresAt'] as DateTime
+                  : (inst['expiresAt'] as Timestamp).toDate();
               if (expiresAt.isAfter(DateTime.now())) return true;
             } else {
               return true;
@@ -189,10 +194,63 @@ class UserModel {
     return false;
   }
 
+  bool hasAnyActiveExam() {
+    for (final selection in examSelections.values) {
+      if (selection is Map && selection['institutions'] is Map) {
+        final institutions = selection['institutions'] as Map;
+        for (final inst in institutions.values) {
+          if (inst is Map) {
+            if (inst['expiresAt'] != null) {
+              final expiresAt = inst['expiresAt'] is DateTime
+                  ? inst['expiresAt'] as DateTime
+                  : (inst['expiresAt'] as Timestamp).toDate();
+              if (expiresAt.isAfter(DateTime.now())) return true;
+            } else {
+              return true; // Legacy package
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  List<Map<String, dynamic>> getActivePackages() {
+    final activePackages = <Map<String, dynamic>>[];
+    examSelections.forEach((examType, selection) {
+      if (selection is Map && selection['institutions'] is Map) {
+        final institutions = selection['institutions'] as Map;
+        institutions.forEach((instKey, instData) {
+          if (instData is Map) {
+            DateTime? expiresAt;
+            if (instData['expiresAt'] != null) {
+              expiresAt = instData['expiresAt'] is DateTime
+                  ? instData['expiresAt'] as DateTime
+                  : (instData['expiresAt'] as Timestamp).toDate();
+            }
+            if (expiresAt == null || expiresAt.isAfter(DateTime.now())) {
+              activePackages.add({
+                'examType': examType,
+                'institutionId': instData['institutionId'] ?? instKey,
+                'sectionId': instData['sectionId'] ?? '',
+                'sectionName': instData['sectionName'] ?? '',
+                'expiresAt': expiresAt,
+                'subjects':
+                    instData['initialSubjectsFallback'] ??
+                    instData['subjects'] ??
+                    [],
+              });
+            }
+          }
+        });
+      }
+    });
+    return activePackages;
+  }
+
   /// Returns the list of center IDs the user has purchased for an exam type.
   List<String> getExamCenters(String examType) {
     String normalized = examType.toLowerCase().trim();
-
 
     final selection = examSelections[normalized];
     if (selection is! Map || selection['institutions'] is! Map) return [];
@@ -223,7 +281,6 @@ class UserModel {
     try {
       String normalized = examType.toLowerCase().trim();
 
-
       final selection = examSelections[normalized];
       if (selection == null || selection is! Map) return [];
 
@@ -251,7 +308,6 @@ class UserModel {
   ) {
     try {
       String normalized = examType.toLowerCase().trim();
-
 
       final selection = examSelections[normalized];
       if (selection == null || selection is! Map) return null;

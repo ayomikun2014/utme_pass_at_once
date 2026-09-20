@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:utme_pass_at_once/features/user/models/question_model.dart';
 import 'custom_loader.dart';
+import 'package:utme_pass_at_once/core/services/backend_api.dart';
 
 /// A widget that renders a list of ContentBlockModel items natively.
 /// Supports text, LaTeX math, remote/local images, and tabular data.
@@ -56,12 +57,7 @@ class RichContentRenderer extends StatelessWidget {
     try {
       switch (block.type) {
         case 'text':
-          return Text(
-            block.value ?? '',
-            style: style,
-            softWrap: true,
-            overflow: TextOverflow.visible,
-          );
+          return _buildStyledText(block.value ?? '', style);
 
         case 'latex':
           return _buildLatexWrap(block.value ?? '', style);
@@ -70,15 +66,14 @@ class RichContentRenderer extends StatelessWidget {
           final rawSrc = block.src;
           if (rawSrc == null || rawSrc.isEmpty) return const SizedBox.shrink();
 
-          // Resolve src: if it's not http and not assets/, assume it's Firebase Storage
+          // Resolve src: if it's not http and not assets/, it is a path in
+          // the public storage bucket.
           String src = rawSrc;
           final bool isRemote = rawSrc.startsWith('http');
           final bool isAsset = rawSrc.startsWith('assets/');
 
           if (!isRemote && !isAsset) {
-            const bucket = 'utme-pass-at-once-36340.firebasestorage.app';
-            final encodedPath = Uri.encodeComponent(rawSrc);
-            src = 'https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encodedPath?alt=media';
+            src = BackendApi.publicFileUrl(rawSrc);
           }
 
           final isSvg = src.toLowerCase().contains('.svg'); // Use contains because of query params
@@ -317,4 +312,65 @@ class RichContentRenderer extends StatelessWidget {
       softWrap: true,
     );
   }
+}
+
+Widget _buildStyledText(String text, TextStyle defaultStyle) {
+  final List<TextSpan> spans = [];
+  bool isItalic = false;
+  bool isUnderlined = false;
+
+  final tagRegex = RegExp(r'(<i>|</i>|<u>|</u>)');
+  final matches = tagRegex.allMatches(text);
+
+  if (matches.isEmpty) {
+    return Text(
+      text,
+      style: defaultStyle,
+      softWrap: true,
+      overflow: TextOverflow.visible,
+    );
+  }
+
+  int lastIndex = 0;
+  for (final match in matches) {
+    if (match.start > lastIndex) {
+      final segment = text.substring(lastIndex, match.start);
+      spans.add(TextSpan(
+        text: segment,
+        style: defaultStyle.copyWith(
+          fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
+          decoration: isUnderlined ? TextDecoration.underline : defaultStyle.decoration,
+        ),
+      ));
+    }
+
+    final tag = match.group(0);
+    if (tag == '<i>') {
+      isItalic = true;
+    } else if (tag == '</i>') {
+      isItalic = false;
+    } else if (tag == '<u>') {
+      isUnderlined = true;
+    } else if (tag == '</u>') {
+      isUnderlined = false;
+    }
+
+    lastIndex = match.end;
+  }
+
+  if (lastIndex < text.length) {
+    final segment = text.substring(lastIndex);
+    spans.add(TextSpan(
+      text: segment,
+      style: defaultStyle.copyWith(
+        fontStyle: isItalic ? FontStyle.italic : defaultStyle.fontStyle,
+        decoration: isUnderlined ? TextDecoration.underline : defaultStyle.decoration,
+      ),
+    ));
+  }
+
+  return RichText(
+    text: TextSpan(children: spans, style: defaultStyle),
+    softWrap: true,
+  );
 }

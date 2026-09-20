@@ -12,10 +12,6 @@ class StudyNotesProvider with ChangeNotifier {
   String _searchQuery = '';
   String? _selectedSubjectId;
 
-  // Track current context to prevent unnecessary re-fetching
-  String? _currentExamType;
-  String? _currentInstitutionId;
-
   bool _hasFetched = false;
 
   List<StudySubjectModel> get subjects => _subjects;
@@ -26,29 +22,15 @@ class StudyNotesProvider with ChangeNotifier {
   String get searchQuery => _searchQuery;
   String? get selectedSubjectId => _selectedSubjectId;
 
-  Future<void> loadStudyNotes({
-    required String examType,
-    String? institutionId,
-    bool forceRefresh = false,
-  }) async {
-    // Use cache if we already have the exact data for this exam/institution
-    if (!forceRefresh && _hasFetched &&
-        _currentExamType == examType &&
-        _currentInstitutionId == institutionId) {
-      return;
-    }
+  Future<void> loadStudyNotes({bool forceRefresh = false}) async {
+    if (!forceRefresh && _hasFetched) return;
 
     _isLoading = true;
     _error = null;
-    _currentExamType = examType;
-    _currentInstitutionId = institutionId;
     notifyListeners();
 
     try {
-      _subjects = await _service.fetchStudyNotes(
-        examType: examType,
-        institutionId: institutionId,
-      );
+      _subjects = _ordered(await _service.fetchStudyNotes());
       _hasFetched = true;
       _isLoading = false;
     } catch (e) {
@@ -59,6 +41,31 @@ class StudyNotesProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Use of English first, then the rest by name.
+  ///
+  /// It is the note every reader can open without activating anything, so it
+  /// leads the list rather than sitting wherever Firestore happened to return
+  /// it -- which is by document id, and puts it last.
+  List<StudySubjectModel> _ordered(List<StudySubjectModel> subjects) {
+    final sorted = [...subjects];
+    sorted.sort((a, b) {
+      final aFirst = _isUseOfEnglish(a);
+      final bFirst = _isUseOfEnglish(b);
+      if (aFirst != bFirst) return aFirst ? -1 : 1;
+      return a.subjectName.toLowerCase().compareTo(b.subjectName.toLowerCase());
+    });
+    return sorted;
+  }
+
+  /// Matches on the id or the name, so renaming the document does not quietly
+  /// send it back down the list. Literature in English is not it.
+  static bool _isUseOfEnglish(StudySubjectModel s) {
+    final id = s.subjectId.toLowerCase();
+    if (id == 'use_of_english') return true;
+    final text = '$id ${s.subjectName.toLowerCase()}';
+    return text.contains('english') && !text.contains('literature');
+  }
+
   void setSearchQuery(String query) {
     _searchQuery = query;
     notifyListeners();
@@ -67,38 +74,5 @@ class StudyNotesProvider with ChangeNotifier {
   void setSelectedSubject(String? subjectId) {
     _selectedSubjectId = subjectId;
     notifyListeners();
-  }
-
-  List<StudyTopicModel> get filteredTopics {
-    List<StudyTopicModel> allTopics = [];
-
-    // 1. Filter by subject
-    if (_selectedSubjectId == null) {
-      for (var subject in _subjects) {
-        allTopics.addAll(subject.topics.values);
-      }
-    } else {
-      final selected = _subjects.firstWhere(
-            (s) => s.subjectId == _selectedSubjectId,
-        orElse: () => StudySubjectModel(subjectId: '', subjectName: '', topics: {}),
-      );
-      allTopics.addAll(selected.topics.values);
-    }
-
-    // 2. Filter by search query
-    if (_searchQuery.isEmpty) return allTopics;
-
-    return allTopics.where((topic) {
-      return topic.title.toLowerCase().contains(_searchQuery.toLowerCase());
-    }).toList();
-  }
-
-  String getSubjectName(String topicId) {
-    for (var subject in _subjects) {
-      if (subject.topics.containsKey(topicId)) {
-        return subject.subjectName;
-      }
-    }
-    return 'General';
   }
 }

@@ -17,11 +17,18 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
-    // Basic Admin Check (Active)
+    // An admin who is active and approved.
+    //
+    // isApproved defaults to true here on purpose: records created before
+    // approval was tracked do not carry the field, and those admins are real.
+    // What is refused is an explicit false -- which is what self-registration
+    // writes, and what the create rule below now insists on.
     function isAdmin() {
       return signedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        (!("isActive" in adminDoc().data) || adminDoc().data.isActive == true);
+        adminDoc().data.get('isActive', false) == true &&
+        adminDoc().data.get('isApproved', true) == true &&
+        adminDoc().data.get('role', '') != 'pending';
     }
 
     // Strict Super Admin Check
@@ -32,21 +39,58 @@ service cloud.firestore {
       );
     }
 
-    function adminFieldsAreValid() {
-      return request.resource.data.keys().hasAny(['email', 'role']);
+    // The centre (sub-admin) a reader belongs to, or '' for a reader who
+    // belongs to none. Used to keep classroom lists inside one centre.
+    function myCentre() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('referredBy', '')
+        : '';
     }
 
-    function voucherFieldsAreValid() {
-      return request.resource.data.keys().hasAny(['code', 'status']);
+    function sameCentre(centre) {
+      return signedIn() && centre != '' && centre == myCentre();
+    }
+
+    function centreOf(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+        ? get(/databases/$(database)/documents/users/$(userId)).data.get('referredBy', '')
+        : '';
+    }
+
+    // A reader's own record, or an empty map when they have none.
+    function userData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+    }
+
+    // Has this reader activated this exam? examSelections is keyed by exam
+    // type and written only by the backend; isPremium is the global pass an
+    // admin can grant.
+    function hasExam(examType) {
+      return signedIn() && (
+        userData().get('examSelections', {}).keys().hasAny([examType]) ||
+        userData().get('isPremium', false) == true
+      );
+    }
+
+    function isMine(data) {
+      return signedIn() && (
+        data.get('uid', '') == request.auth.uid ||
+        data.get('userId', '') == request.auth.uid ||
+        data.get('subAdminUid', '') == request.auth.uid
+      );
     }
 
     // =========================================================
     // 1. ADMINS
     // =========================================================
     match /admins/{adminId} {
-      // ✅ UPDATED: Allow any signed-in user to read admin profiles
-      // (Needed to fetch center names during voucher unlock and eClassroom)
-      allow read: if signedIn();
+      // A reader looks one admin up by id -- their centre's name when a code
+      // is redeemed, the teacher behind an eClassroom test. Reading the whole
+      // roster is an admin's to do: it carries names, emails and phone numbers.
+      allow get: if signedIn();
+      allow list: if isAdmin();
 
       // ✅ UPDATED: Secure Self-Registration.
       // Super Admins can create any admin. 
@@ -59,7 +103,10 @@ service cloud.firestore {
         && request.resource.data.get('role', '') != 'Super Admin'
         && request.resource.data.get('role', '') != 'super_admin'
         && (
-          request.resource.data.get('isApproved', false) == false || 
+          // Written out, not merely absent: a record with no isApproved field
+          // counts as approved above, so leaving it out would have been a way
+          // in. The site owners' own records are the one exception.
+          request.resource.data.isApproved == false || 
           request.auth.token.email in ['ogunfolajinf32@gmail.com', 'taiwoprints999@gmail.com']
         )
       );
@@ -110,7 +157,11 @@ service cloud.firestore {
     // 2. USERS
     // =========================================================
     match /users/{userId} {
-      allow read: if signedIn();
+      // A reader sees themselves; a centre sees its own students; admins see
+      // everyone. Nobody else can read another reader's profile.
+      allow get: if isOwner(userId) || isAdmin() ||
+        sameCentre(resource.data.get('referredBy', ''));
+      allow list: if isAdmin() || sameCentre(resource.data.get('referredBy', ''));
       allow create: if isOwner(userId) || isAdmin();
       allow update: if isOwner(userId) || isAdmin();
       allow delete: if isOwner(userId) || isAdmin();
@@ -119,25 +170,65 @@ service cloud.firestore {
     // =========================================================
     // 3. QUESTION BANK & QUESTIONS
     // =========================================================
-    match /questionBank/{document=**} {
+    // A year document holds that year's questions -- it is the paid content
+    // itself, and only a reader who has activated the exam may open one. The
+    // lists above it are the shop window: the store reads them to say what a
+    // package covers, which has to work before anything is bought.
+    match /questionBank/{examType} {
       allow read: if signedIn();
-      allow write: if isSuperAdmin(); // Locked to Super Admin
+      allow write: if isSuperAdmin();
+
+      // JAMB, WAEC, NECO: subjects sit directly under the exam.
+      match /subjects/{subjectId} {
+        allow read: if signedIn();
+        allow write: if isSuperAdmin();
+
+        match /years/{yearId} {
+          allow read: if isAdmin() || hasExam(examType);
+          allow write: if isSuperAdmin();
+
+          match /{rest=**} {
+            allow read: if isAdmin() || hasExam(examType);
+            allow write: if isSuperAdmin();
+          }
+        }
+      }
+
+      // Post-UTME: each institution has its own subjects.
+      match /institutions/{institutionId} {
+        allow read: if signedIn();
+        allow write: if isSuperAdmin();
+
+        match /subjects/{subjectId} {
+          allow read: if signedIn();
+          allow write: if isSuperAdmin();
+
+          match /years/{yearId} {
+            allow read: if isAdmin() || hasExam(examType);
+            allow write: if isSuperAdmin();
+
+            match /{rest=**} {
+              allow read: if isAdmin() || hasExam(examType);
+              allow write: if isSuperAdmin();
+            }
+          }
+        }
+      }
     }
 
+    // An older, unused collection. Nothing in either app reads it; an admin
+    // can still look, and only a main admin can write.
     match /questions/{document=**} {
-      allow read: if signedIn();
-      allow write: if isSuperAdmin(); // Locked to Super Admin
+      allow read: if isAdmin();
+      allow write: if isSuperAdmin();
     }
 
-    match /{path=**}/questions/{questionId} {
-      allow read: if signedIn();
-      allow write: if isSuperAdmin();
-    }
+    // Subject names are metadata wherever they live -- study notes, admission
+    // data -- so this stays open. There is deliberately no matching rule for
+    // years or questions: a recursive allow anywhere would hand back the
+    // question documents the rules above are there to protect. eClassroom test
+    // questions have their own rule under admins/{adminId}/tests.
     match /{path=**}/subjects/{subjectId} {
-      allow read: if signedIn();
-      allow write: if isSuperAdmin();
-    }
-    match /{path=**}/years/{yearId} {
       allow read: if signedIn();
       allow write: if isSuperAdmin();
     }
@@ -185,7 +276,9 @@ service cloud.firestore {
     }
 
     match /users/{userId}/exam_history/{historyId} {
-      allow read: if signedIn();
+      // Scores are shown on the centre leaderboard, so a centre may read its
+      // own students' history -- and no further.
+      allow read: if isOwner(userId) || isAdmin() || sameCentre(centreOf(userId));
       allow write: if isOwner(userId) || isAdmin();
     }
 
@@ -193,8 +286,17 @@ service cloud.firestore {
     // 6. VOUCHERS
     // =========================================================
     match /vouchers/{voucherId} {
-      // Any signed-in user can read (needed for validation and queries)
-      allow read: if signedIn();
+      // A code can be looked up by name -- that is how the unlock screen
+      // checks what someone typed. Listing the collection would hand out
+      // unused codes, so only admins may do that, and a buyer may list the
+      // ones that are theirs.
+      allow get: if signedIn();
+      allow list: if isAdmin() || (signedIn() && (
+        resource.data.get('soldToUid', '') == request.auth.uid ||
+        resource.data.get('usedByUid', '') == request.auth.uid ||
+        resource.data.get('subAdminId', '') == request.auth.uid ||
+        resource.data.get('createdBy', '') == request.auth.uid
+      ));
       allow create: if isAdmin();
       allow update: if isAdmin() || (
           signedIn()
@@ -209,34 +311,42 @@ service cloud.firestore {
     // 7. PAYMENTS & AUDIT 
     // =========================================================
     match /payment_transactions/{txId} {
-      // ✅ UPDATED: Allowed Admin to easily read payments to verify receipts, and sub-admins can read their own
-      // ✅ UPDATED: Allow any signed-in user to fetch a single transaction (needed for voucher activation checks)
-      allow get: if signedIn();
-      
-      // ✅ UPDATED: Only allow users/sub-admins to list/query their own transactions, and admins to list all
-      allow list: if signedIn() && (
-        resource.data.uid == request.auth.uid || 
-        resource.data.userId == request.auth.uid || 
-        resource.data.subAdminUid == request.auth.uid || 
-        isAdmin()
-      );
-      
-      // ✅ UPDATED: Allows Sub-Admins to create purchase requests via subAdminUid, and Admins to manage them
-      allow create: if isAdmin() || (signedIn() && (
-        request.resource.data.uid == request.auth.uid || 
-        request.resource.data.userId == request.auth.uid || 
-        request.resource.data.subAdminUid == request.auth.uid
-      ));
-      
-      // ✅ UPDATED: Cleaned up Admin approval rules
-      allow update: if isAdmin() || (
-        signedIn() && (
-          (resource.data.uid == request.auth.uid || resource.data.subAdminUid == request.auth.uid || resource.data.userId == request.auth.uid) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'voucherCode', 'updatedAt', 'hiddenByUser', 'userHiddenAt', 'userHiddenByUid'])
-        )
+      // A payment carries a name, an email, an amount and an activation code,
+      // and its id is guessable, so only its owner and the admins may read it.
+      allow get: if isAdmin() || isMine(resource.data);
+      allow list: if isAdmin() || isMine(resource.data);
+
+      // A buyer may open a payment of their own, and only as an unpaid one:
+      // the server is what marks a payment complete and attaches a code.
+      allow create: if isAdmin() || (
+        signedIn()
+        && isMine(request.resource.data)
+        && request.resource.data.get('status', 'pending') in ['pending', 'initialized']
+        && request.resource.data.get('voucherCode', null) == null
+      ) || (
+        // The record of a code redeemed rather than bought. The app now leaves
+        // this to the backend, but the build already on people's phones writes
+        // it as part of the activation, and refusing it fails the activation
+        // with it. getAfter() is the voucher as it stands when the transaction
+        // commits, so this record cannot be invented -- it costs a real code.
+        signedIn()
+        && isMine(request.resource.data)
+        && request.resource.data.get('status', '') == 'used'
+        && request.resource.data.get('paymentMethod', '') == 'voucher'
+        && getAfter(/databases/$(database)/documents/vouchers/$(request.resource.data.voucherCode))
+             .data.get('usedByUid', '') == request.auth.uid
       );
 
-      // ✅ UPDATED: Allow Admins to delete transactions for cleanup
+      // A buyer may call their payment off, or mark the code they redeemed as
+      // used. Marking it approved or completed is the server's to do.
+      allow update: if isAdmin() || (
+        signedIn()
+        && isMine(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'voucherCode', 'updatedAt', 'failureReason', 'hiddenByUser', 'userHiddenAt', 'userHiddenByUid'])
+        && request.resource.data.get('status', '') in ['pending', 'cancelled', 'failed', 'used']
+      );
+
       allow delete: if isAdmin();
     }
 
@@ -261,7 +371,7 @@ service cloud.firestore {
       allow read: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$');
       allow write: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$') && isSuperAdmin();
 
-      match /faculties/{facultyId} {
+      match /{subCollectionId}/{subDocId} {
         allow read: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$');
         allow write: if collectionId.matches('^[a-zA-Z0-9_]+_admission_data$') && isSuperAdmin();
       }

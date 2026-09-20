@@ -121,6 +121,13 @@ class SettingsService {
       'necoPrice': settings.necoPrice,
       'postUtmePrice': settings.postUtmePrice,
 
+      // Cached with the rest, otherwise an offline read falls back to the
+      // built-in defaults and the store forgets what the admin put on sale.
+      'jambOnSale': settings.jambOnSale,
+      'waecOnSale': settings.waecOnSale,
+      'necoOnSale': settings.necoOnSale,
+      'postUtmeOnSale': settings.postUtmeOnSale,
+
       'bankDetails': settings.bankDetails.map((b) => b.toMap()).toList(),
 
       'contactEmail': settings.contactEmail,

@@ -9,31 +9,37 @@ import 'package:intl/intl.dart';
 import 'dry_pdf_button.dart';
 import 'widgets/eclassroom_shared_widgets.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../auth/providers/auth_provider.dart';
 import '../../../../core/services/network_service.dart';
+import 'package:utme_pass_at_once/core/services/backend_api.dart';
 
 class AssignmentListScreen extends StatefulWidget {
   final String adminId;
   final String subject;
-  const AssignmentListScreen({super.key, required this.adminId, required this.subject});
+  const AssignmentListScreen({
+    super.key,
+    required this.adminId,
+    required this.subject,
+  });
 
   @override
   State<AssignmentListScreen> createState() => _AssignmentListScreenState();
 }
 
-class _AssignmentListScreenState extends State<AssignmentListScreen> with SingleTickerProviderStateMixin {
+class _AssignmentListScreenState extends State<AssignmentListScreen>
+    with SingleTickerProviderStateMixin {
   final EClassroomService _classroomService = EClassroomService();
   TabController? _tabController;
-  
+
   bool _isLoading = true;
   String? _errorMessage;
-  
+
   List<Assignment> _allAssignments = [];
-  Map<String, Map<String, dynamic>> _studentSubmissions = {}; // assignmentId -> submissionData
+  Map<String, Map<String, dynamic>> _studentSubmissions =
+      {}; // assignmentId -> submissionData
 
   @override
   void initState() {
@@ -52,7 +58,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     final isOnline = NetworkService.instance.isOnline;
     if (!isOnline) {
       if (context.mounted) {
-        CustomToast.show(context, 'No internet connection. Failed to refresh.', isError: true);
+        CustomToast.show(
+          context,
+          'No internet connection. Failed to refresh.',
+          isError: true,
+        );
       }
       return;
     }
@@ -69,14 +79,20 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final studentId = authProvider.currentUser?.uid ?? '';
-      
+
       // 1. Fetch all classroom assignments
-      final assignments = await _classroomService.getAssignments(widget.adminId);
-      
+      final assignments = await _classroomService.getAssignments(
+        widget.adminId,
+      );
+
       // 2. Fetch student submissions in parallel
       final Map<String, Map<String, dynamic>> submissions = {};
-      final querySource = NetworkService.instance.isOnline ? Source.serverAndCache : Source.cache;
-      final List<Future<void>> submissionFutures = assignments.map((assignment) async {
+      final querySource = NetworkService.instance.isOnline
+          ? Source.serverAndCache
+          : Source.cache;
+      final List<Future<void>> submissionFutures = assignments.map((
+        assignment,
+      ) async {
         final doc = await FirebaseFirestore.instance
             .collection('admins')
             .doc(widget.adminId)
@@ -117,7 +133,8 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     final nowWAT = DateTime.now().toUtc().add(const Duration(hours: 1));
 
     final activeAssignments = _allAssignments.where((a) {
-      if (a.subject.trim().toLowerCase() != widget.subject.trim().toLowerCase()) return false;
+      if (a.subject.trim().toLowerCase() != widget.subject.trim().toLowerCase())
+        return false;
       final hasSubmitted = _studentSubmissions.containsKey(a.id);
       final dueDateWAT = a.dueDate.toUtc().add(const Duration(hours: 1));
       final isExpired = dueDateWAT.isBefore(nowWAT);
@@ -125,7 +142,8 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     }).toList();
 
     final completedAssignments = _allAssignments.where((a) {
-      if (a.subject.trim().toLowerCase() != widget.subject.trim().toLowerCase()) return false;
+      if (a.subject.trim().toLowerCase() != widget.subject.trim().toLowerCase())
+        return false;
       final hasSubmitted = _studentSubmissions.containsKey(a.id);
       final dueDateWAT = a.dueDate.toUtc().add(const Duration(hours: 1));
       final isExpired = dueDateWAT.isBefore(nowWAT);
@@ -142,7 +160,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 SliverAppBar(
                   title: Text(
                     '${widget.subject} Assignments',
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   backgroundColor: AppColors.primary,
                   elevation: 0,
@@ -156,8 +177,14 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     indicatorWeight: 3.5,
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.white70,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                    unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    labelStyle: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14,
+                    ),
+                    unselectedLabelStyle: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
                     tabs: const [
                       Tab(text: 'Active'),
                       Tab(text: 'Completed & Past'),
@@ -169,62 +196,88 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
             body: _isLoading
                 ? const CustomLoader()
                 : _errorMessage != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Failed to load assignments',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(_errorMessage!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
-                              const SizedBox(height: 24),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                ),
-                                onPressed: _loadData,
-                                child: const Text('Retry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : TabBarView(
-                        controller: _tabController,
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildAssignmentsList(
-                            activeAssignments,
-                            isDark,
-                            const EClassroomEmptyState(
-                              icon: Icons.assignment_outlined,
-                              message: 'No active assignments',
+                          const Icon(
+                            Icons.error_outline_rounded,
+                            color: Colors.redAccent,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Failed to load assignments',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          _buildAssignmentsList(
-                            completedAssignments,
-                            isDark,
-                            const EClassroomEmptyState(
-                              icon: Icons.history_rounded,
-                              message: 'No completed or past assignments',
+                          const SizedBox(height: 8),
+                          Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                            onPressed: _loadData,
+                            child: const Text(
+                              'Retry',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
                       ),
+                    ),
+                  )
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildAssignmentsList(
+                        activeAssignments,
+                        isDark,
+                        const EClassroomEmptyState(
+                          icon: Icons.assignment_outlined,
+                          message: 'No active assignments',
+                        ),
+                      ),
+                      _buildAssignmentsList(
+                        completedAssignments,
+                        isDark,
+                        const EClassroomEmptyState(
+                          icon: Icons.history_rounded,
+                          message: 'No completed or past assignments',
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAssignmentsList(List<Assignment> assignments, bool isDark, Widget emptyState) {
+  Widget _buildAssignmentsList(
+    List<Assignment> assignments,
+    bool isDark,
+    Widget emptyState,
+  ) {
     if (assignments.isEmpty) {
       return emptyState;
     }
@@ -244,7 +297,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     );
   }
 
-  Widget _buildAssignmentCard(BuildContext context, Assignment assignment, bool isDark) {
+  Widget _buildAssignmentCard(
+    BuildContext context,
+    Assignment assignment,
+    bool isDark,
+  ) {
     final nowWAT = DateTime.now().toUtc().add(const Duration(hours: 1));
     final dueDateWAT = assignment.dueDate.toUtc().add(const Duration(hours: 1));
     final isOverdue = dueDateWAT.isBefore(nowWAT);
@@ -257,10 +314,14 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       elevation: 0,
-      color: isDark ? AppColors.surfaceDark.withValues(alpha: 0.5) : Colors.grey.shade50,
+      color: isDark
+          ? AppColors.surfaceDark.withValues(alpha: 0.5)
+          : Colors.grey.shade50,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: isDark ? AppColors.dividerDark : Colors.grey.shade200),
+        side: BorderSide(
+          color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -273,12 +334,18 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 Expanded(
                   child: Text(
                     assignment.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: isOverdue
                         ? Colors.red.withValues(alpha: 0.1)
@@ -296,7 +363,8 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 ),
               ],
             ),
-            if (assignment.description != null && assignment.description!.isNotEmpty) ...[
+            if (assignment.description != null &&
+                assignment.description!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 assignment.description!,
@@ -308,7 +376,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.calendar_today_rounded, size: 14, color: Colors.grey.shade600),
+                Icon(
+                  Icons.calendar_today_rounded,
+                  size: 14,
+                  color: Colors.grey.shade600,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Due: ${DateFormat('MMM dd, yyyy - hh:mm a').format(assignment.dueDate.toUtc().add(const Duration(hours: 1)))} (WAT)',
@@ -316,16 +388,23 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 ),
                 const SizedBox(width: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: (isText ? Colors.teal : Colors.orange).withValues(alpha: 0.1),
+                    color: (isText ? Colors.teal : Colors.orange).withValues(
+                      alpha: 0.1,
+                    ),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isText ? Icons.article_rounded : Icons.picture_as_pdf_rounded,
+                        isText
+                            ? Icons.article_rounded
+                            : Icons.picture_as_pdf_rounded,
                         size: 12,
                         color: isText ? Colors.teal : Colors.orange,
                       ),
@@ -351,7 +430,9 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     height: 48,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                        backgroundColor: AppColors.primary.withValues(
+                          alpha: 0.1,
+                        ),
                         foregroundColor: AppColors.primary,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
@@ -369,7 +450,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                         );
                       },
                       icon: const Icon(Icons.visibility_rounded, size: 18),
-                      label: const Text('View Assignment Content', style: TextStyle(fontWeight: FontWeight.w700)),
+                      label: const Text(
+                        'View Assignment Content',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   )
                 : DryPdfButton(
@@ -377,14 +461,28 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     title: assignment.title,
                   ),
             const SizedBox(height: 12),
-            _buildSubmissionArea(assignment, uid, displayName, email, isDark, isOverdue),
+            _buildSubmissionArea(
+              assignment,
+              uid,
+              displayName,
+              email,
+              isDark,
+              isOverdue,
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSubmissionArea(Assignment assignment, String uid, String displayName, String email, bool isDark, bool isOverdue) {
+  Widget _buildSubmissionArea(
+    Assignment assignment,
+    String uid,
+    String displayName,
+    String email,
+    bool isDark,
+    bool isOverdue,
+  ) {
     final data = _studentSubmissions[assignment.id];
     final hasSubmitted = data != null;
 
@@ -423,7 +521,12 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
             foregroundColor: AppColors.primary,
           ),
           onPressed: () {
-            _showSubmissionSheet(assignment, uid, displayName, email).then((_) => _loadData());
+            _showSubmissionSheet(
+              assignment,
+              uid,
+              displayName,
+              email,
+            ).then((_) => _loadData());
           },
           icon: const Icon(Icons.cloud_upload_rounded, size: 18),
           label: const Text(
@@ -459,7 +562,9 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
           Row(
             children: [
               Icon(
-                isGraded ? Icons.check_circle_rounded : Icons.watch_later_rounded,
+                isGraded
+                    ? Icons.check_circle_rounded
+                    : Icons.watch_later_rounded,
                 size: 16,
                 color: isGraded ? Colors.green : Colors.orange,
               ),
@@ -475,7 +580,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
               const Spacer(),
               if (isGraded && grade != null && grade.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green,
                     borderRadius: BorderRadius.circular(8),
@@ -538,7 +646,12 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
     );
   }
 
-  Future<void> _showSubmissionSheet(Assignment assignment, String uid, String displayName, String email) async {
+  Future<void> _showSubmissionSheet(
+    Assignment assignment,
+    String uid,
+    String displayName,
+    String email,
+  ) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -553,23 +666,32 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
-
             Future<void> pickFromCamera() async {
               try {
                 if (selectedImages.length >= maxImages) {
                   if (context.mounted) {
-                    CustomToast.show(context, 'Maximum $maxImages photos allowed.', isError: true);
+                    CustomToast.show(
+                      context,
+                      'Maximum $maxImages photos allowed.',
+                      isError: true,
+                    );
                   }
                   return;
                 }
                 final picker = ImagePicker();
-                final pickedFile = await picker.pickImage(source: ImageSource.camera);
+                final pickedFile = await picker.pickImage(
+                  source: ImageSource.camera,
+                );
                 if (pickedFile != null) {
                   final file = File(pickedFile.path);
                   final size = await file.length();
                   if (size > 5 * 1024 * 1024) {
                     if (context.mounted) {
-                      CustomToast.show(context, 'Image file exceeds the 5MB size limit. Please choose a smaller file.', isError: true);
+                      CustomToast.show(
+                        context,
+                        'Image file exceeds the 5MB size limit. Please choose a smaller file.',
+                        isError: true,
+                      );
                     }
                     return;
                   }
@@ -588,7 +710,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 final remaining = maxImages - selectedImages.length;
                 if (remaining <= 0) {
                   if (context.mounted) {
-                    CustomToast.show(context, 'Maximum $maxImages photos allowed.', isError: true);
+                    CustomToast.show(
+                      context,
+                      'Maximum $maxImages photos allowed.',
+                      isError: true,
+                    );
                   }
                   return;
                 }
@@ -601,7 +727,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     final size = await file.length();
                     if (size > 5 * 1024 * 1024) {
                       if (context.mounted) {
-                        CustomToast.show(context, '"${picked.name}" exceeds 5MB and was skipped.', isError: true);
+                        CustomToast.show(
+                          context,
+                          '"${picked.name}" exceeds 5MB and was skipped.',
+                          isError: true,
+                        );
                       }
                       continue;
                     }
@@ -613,7 +743,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     });
                   }
                   if (pickedFiles.length > remaining && context.mounted) {
-                    CustomToast.show(context, 'Only $remaining more photo(s) allowed. Extra images were skipped.');
+                    CustomToast.show(
+                      context,
+                      'Only $remaining more photo(s) allowed. Extra images were skipped.',
+                    );
                   }
                 }
               } catch (e) {
@@ -627,8 +760,12 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 return;
               }
 
-              if (textController.text.trim().isEmpty && selectedImages.isEmpty) {
-                CustomToast.show(context, 'Please type a response or attach homework photo(s).');
+              if (textController.text.trim().isEmpty &&
+                  selectedImages.isEmpty) {
+                CustomToast.show(
+                  context,
+                  'Please type a response or attach homework photo(s).',
+                );
                 return;
               }
 
@@ -637,22 +774,18 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
               });
 
               try {
-                final List<String> attachmentUrls = [];
+                // Photos go to private storage; the teacher opens them
+                // through a short-lived link made from these paths.
+                final List<String> attachmentPaths = [];
 
                 for (int i = 0; i < selectedImages.length; i++) {
-                  final ref = FirebaseStorage.instance
-                      .ref()
-                      .child('admins')
-                      .child(widget.adminId)
-                      .child('assignments')
-                      .child(assignment.id)
-                      .child('submissions')
-                      .child(uid)
-                      .child('attachment_$i.jpg');
-
-                  final uploadTask = await ref.putFile(selectedImages[i]);
-                  final url = await uploadTask.ref.getDownloadURL();
-                  attachmentUrls.add(url);
+                  final path = await BackendApi.upload(
+                    path:
+                        'assignments/${widget.adminId}/${assignment.id}/$uid/attachment_$i.jpg',
+                    bytes: await selectedImages[i].readAsBytes(),
+                    contentType: 'image/jpeg',
+                  );
+                  attachmentPaths.add(path);
                 }
 
                 await FirebaseFirestore.instance
@@ -663,26 +796,55 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     .collection('submissions')
                     .doc(uid)
                     .set({
-                  'studentUid': uid,
-                  'studentName': displayName,
-                  'studentEmail': email,
-                  'textContent': textController.text.trim(),
-                  'attachmentUrl': attachmentUrls.isNotEmpty ? attachmentUrls.first : null,
-                  'attachmentUrls': attachmentUrls,
-                  'submittedAt': FieldValue.serverTimestamp(),
-                  'status': 'submitted',
-                  'grade': null,
-                  'feedback': null,
-                });
+                      'studentUid': uid,
+                      'studentName': displayName,
+                      'studentEmail': email,
+                      'textContent': textController.text.trim(),
+                      'attachmentUrl': null,
+                      'attachmentUrls': const <String>[],
+                      'attachmentPaths': attachmentPaths,
+                      'attachmentStorage': 'supabase',
+                      'submittedAt': FieldValue.serverTimestamp(),
+                      'status': 'submitted',
+                      'grade': null,
+                      'feedback': null,
+                    });
 
                 if (context.mounted) {
                   Navigator.pop(context);
-                  CustomToast.show(context, 'Assignment submitted successfully online!');
+                  CustomToast.show(
+                    context,
+                    'Assignment submitted successfully online!',
+                  );
                 }
               } catch (e) {
                 debugPrint('Error submitting assignment: $e');
                 if (context.mounted) {
-                  CustomToast.show(context, 'Submission failed: $e', isError: true);
+                  final hasInternet = await NetworkService.instance
+                      .hasInternet();
+                  String userFriendlyMsg =
+                      'This service is currently unavailable. Please try again later or contact our support team.';
+                  if (!hasInternet) {
+                    userFriendlyMsg =
+                        'No internet connection. Please check your network and try again.';
+                  } else {
+                    final msg = e.toString();
+                    if (!msg.contains('unavailable') &&
+                        !msg.contains('quota') &&
+                        !msg.contains('SocketException') &&
+                        !msg.contains('TimeoutException') &&
+                        !msg.contains('ClientException') &&
+                        !msg.contains('Failed to fetch') &&
+                        !msg.contains('permission-denied') &&
+                        !msg.contains('unauthorized')) {
+                      userFriendlyMsg =
+                          'Submission failed: ${msg.replaceAll('Exception: ', '').replaceAll('FirebaseException: ', '')}';
+                    }
+                  }
+                  // The sheet can be gone by the time an upload fails.
+                  if (context.mounted) {
+                    CustomToast.show(context, userFriendlyMsg, isError: true);
+                  }
                 }
               } finally {
                 setSheetState(() {
@@ -697,7 +859,9 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
               ),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: DraggableScrollableSheet(
                 initialChildSize: 0.75,
@@ -707,7 +871,12 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                 builder: (context, scrollController) {
                   return SingleChildScrollView(
                     controller: scrollController,
-                    padding: const EdgeInsets.all(24),
+                    padding: EdgeInsets.fromLTRB(
+                      24,
+                      24,
+                      24,
+                      24 + MediaQuery.of(context).viewPadding.bottom,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -715,11 +884,16 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                           children: [
                             const Text(
                               'Submit Assignment',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
                             ),
                             const Spacer(),
                             IconButton(
-                              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () => Navigator.pop(context),
                               icon: const Icon(Icons.close_rounded),
                             ),
                           ],
@@ -736,7 +910,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                         const SizedBox(height: 20),
                         const Text(
                           'Type Your Response:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         TextField(
@@ -745,12 +922,16 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                           enabled: !isSubmitting,
                           decoration: InputDecoration(
                             hintText: 'Type your answers or notes here...',
-                            fillColor: isDark ? Colors.grey.shade900 : Colors.grey.shade50,
+                            fillColor: isDark
+                                ? Colors.grey.shade900
+                                : Colors.grey.shade50,
                             filled: true,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                               borderSide: BorderSide(
-                                color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+                                color: isDark
+                                    ? AppColors.dividerDark
+                                    : Colors.grey.shade300,
                               ),
                             ),
                           ),
@@ -760,7 +941,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                           children: [
                             const Text(
                               'Attach Homework Photos (Max 5MB each):',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
                             ),
                             const Spacer(),
                             Text(
@@ -768,7 +952,9 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: selectedImages.length >= maxImages ? Colors.red : Colors.grey.shade600,
+                                color: selectedImages.length >= maxImages
+                                    ? Colors.red
+                                    : Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -796,23 +982,37 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                           fit: BoxFit.cover,
                                         ),
                                         border: Border.all(
-                                          color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+                                          color: isDark
+                                              ? AppColors.dividerDark
+                                              : Colors.grey.shade300,
                                         ),
                                       ),
                                       child: Align(
                                         alignment: Alignment.bottomLeft,
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.5),
-                                            borderRadius: const BorderRadius.only(
-                                              bottomLeft: Radius.circular(9),
-                                              topRight: Radius.circular(6),
+                                            color: Colors.black.withValues(
+                                              alpha: 0.5,
                                             ),
+                                            borderRadius:
+                                                const BorderRadius.only(
+                                                  bottomLeft: Radius.circular(
+                                                    9,
+                                                  ),
+                                                  topRight: Radius.circular(6),
+                                                ),
                                           ),
                                           child: Text(
                                             '${idx + 1}',
-                                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -821,11 +1021,13 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                       top: -6,
                                       right: -6,
                                       child: GestureDetector(
-                                        onTap: isSubmitting ? null : () {
-                                          setSheetState(() {
-                                            selectedImages.removeAt(idx);
-                                          });
-                                        },
+                                        onTap: isSubmitting
+                                            ? null
+                                            : () {
+                                                setSheetState(() {
+                                                  selectedImages.removeAt(idx);
+                                                });
+                                              },
                                         child: Container(
                                           width: 22,
                                           height: 22,
@@ -833,7 +1035,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                             color: Colors.redAccent,
                                             shape: BoxShape.circle,
                                           ),
-                                          child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                                          child: const Icon(
+                                            Icons.close_rounded,
+                                            size: 14,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -850,18 +1056,34 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: AppColors.primary.withValues(alpha: 0.4),
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.4,
+                                        ),
                                         style: BorderStyle.solid,
                                         width: 1.5,
                                       ),
-                                      color: AppColors.primary.withValues(alpha: 0.05),
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.05,
+                                      ),
                                     ),
                                     child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.add_photo_alternate_rounded, color: AppColors.primary, size: 24),
+                                        Icon(
+                                          Icons.add_photo_alternate_rounded,
+                                          color: AppColors.primary,
+                                          size: 24,
+                                        ),
                                         SizedBox(height: 4),
-                                        Text('Add More', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                                        Text(
+                                          'Add More',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -878,17 +1100,29 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                     height: 70,
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+                                        color: isDark
+                                            ? AppColors.dividerDark
+                                            : Colors.grey.shade300,
                                         style: BorderStyle.solid,
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.camera_alt_rounded, color: AppColors.primary),
+                                        Icon(
+                                          Icons.camera_alt_rounded,
+                                          color: AppColors.primary,
+                                        ),
                                         SizedBox(height: 4),
-                                        Text('Camera', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        Text(
+                                          'Camera',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -902,17 +1136,29 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                     height: 70,
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: isDark ? AppColors.dividerDark : Colors.grey.shade300,
+                                        color: isDark
+                                            ? AppColors.dividerDark
+                                            : Colors.grey.shade300,
                                         style: BorderStyle.solid,
                                       ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        Icon(Icons.photo_library_rounded, color: AppColors.primary),
+                                        Icon(
+                                          Icons.photo_library_rounded,
+                                          color: AppColors.primary,
+                                        ),
                                         SizedBox(height: 4),
-                                        Text('Gallery (Multi)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        Text(
+                                          'Gallery (Multi)',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -937,11 +1183,17 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CustomLoader(size: 20, color: Colors.white),
+                                    child: CustomLoader(
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
                                   )
                                 : const Text(
                                     'Submit Homework Online',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
                                   ),
                           ),
                         ),
@@ -968,8 +1220,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
         final textContent = submissionData['textContent'] as String? ?? '';
         // Support both new multi-image field and legacy single-image field
         final List<String> attachmentUrls = [];
-        if (submissionData['attachmentUrls'] != null && submissionData['attachmentUrls'] is List) {
-          attachmentUrls.addAll((submissionData['attachmentUrls'] as List).cast<String>());
+        if (submissionData['attachmentUrls'] != null &&
+            submissionData['attachmentUrls'] is List) {
+          attachmentUrls.addAll(
+            (submissionData['attachmentUrls'] as List).cast<String>(),
+          );
         } else {
           final legacyUrl = submissionData['attachmentUrl'] as String? ?? '';
           if (legacyUrl.isNotEmpty) attachmentUrls.add(legacyUrl);
@@ -983,11 +1238,18 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
             return Container(
               decoration: BoxDecoration(
                 color: isDark ? AppColors.surfaceDark : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
               ),
               child: SingleChildScrollView(
                 controller: scrollController,
-                padding: const EdgeInsets.all(24),
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  24,
+                  24,
+                  24 + MediaQuery.of(context).viewPadding.bottom,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -995,7 +1257,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                       children: [
                         const Text(
                           'Your Submission Details',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
                         ),
                         const Spacer(),
                         IconButton(
@@ -1009,14 +1274,20 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     if (textContent.isNotEmpty) ...[
                       const Text(
                         'Your Text Response:',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppColors.primary,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                          color: isDark
+                              ? Colors.grey.shade900
+                              : Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -1029,7 +1300,11 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                     if (attachmentUrls.isNotEmpty) ...[
                       Text(
                         'Your Photo Attachment${attachmentUrls.length > 1 ? 's (${attachmentUrls.length})' : ''}:',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: AppColors.primary,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       ...attachmentUrls.asMap().entries.map((entry) {
@@ -1062,24 +1337,44 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> with Single
                                       if (progress == null) return child;
                                       return Container(
                                         height: 200,
-                                        color: isDark ? Colors.grey.shade900 : Colors.grey.shade100,
+                                        color: isDark
+                                            ? Colors.grey.shade900
+                                            : Colors.grey.shade100,
                                         child: const CustomLoader(),
                                       );
                                     },
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      height: 120,
-                                      color: Colors.red.withValues(alpha: 0.1),
-                                      child: const Center(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.broken_image_rounded, color: Colors.redAccent, size: 32),
-                                            SizedBox(height: 8),
-                                            Text('Could not load attachment.', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
-                                          ],
+                                    errorBuilder:
+                                        (
+                                          context,
+                                          error,
+                                          stackTrace,
+                                        ) => Container(
+                                          height: 120,
+                                          color: Colors.red.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          child: const Center(
+                                            child: Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.broken_image_rounded,
+                                                  color: Colors.redAccent,
+                                                  size: 32,
+                                                ),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Could not load attachment.',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.redAccent,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ),

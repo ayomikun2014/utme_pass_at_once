@@ -49,7 +49,7 @@ import 'features/user/screens/simulator/simulator_history.dart';
 import 'features/user/screens/simulator/simulator_session_setup.dart';
 import 'features/user/screens/study/bookmarked.dart';
 import 'features/user/screens/study/performance_analysis.dart';
-import 'features/user/screens/study/syllabus_list_screen.dart';
+import 'features/user/screens/study/study_and_syllabus_list_screen.dart';
 import 'features/user/screens/study/exam_dashboard_screen.dart';
 import 'features/user/screens/study/institution_selection_screen.dart';
 import 'features/user/screens/study/study_notes_screen.dart';
@@ -60,15 +60,13 @@ import 'package:utme_pass_at_once/features/user/providers/simulator_provider.dar
 import 'features/user/screens/study/admission/admission_guideline_landing_screen.dart';
 import 'features/user/screens/study/admission/admission_requirements_screen.dart';
 import 'features/user/screens/study/admission/admission_cut_offs_screen.dart';
+import 'features/user/screens/study/admission/finder/admission_finder_intro.dart';
+import 'features/user/screens/study/admission/finder/admission_finder_form.dart';
+import 'features/user/screens/study/admission/finder/admission_finder_results.dart';
 
 // --- ECLASSROOM IMPORTS ---
-import 'features/user/screens/eClassroom/test_subject_list_screen.dart';
-import 'features/user/screens/eClassroom/assignment_list_screen.dart';
-import 'features/user/screens/eClassroom/study_note_list_screen.dart';
-import 'features/user/screens/eClassroom/notice_board_screen.dart';
 
 // --- VIDEO TUTORIALS ---
-import 'features/user/screens/videos/video_subjects_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -77,7 +75,6 @@ class AppRoutes {
   static const String signup = '/signup';
   static const String forgetPassword = '/forget-password';
   static const String mainShell = '/main-shell';
-  static const String silver = '/silver';
   static const String store = '/store';
   static const String myAccount = '/my_account';
   static const String settings = '/settings';
@@ -107,17 +104,8 @@ class AppRoutes {
   static const String announcements = '/announcements';
 
   // --- ECLASSROOM ROUTES ---
-  static const String eclassroomTests = '/eclassroom_tests';
-  static const String eclassroomAssignments = '/eclassroom_assignments';
-  static const String eclassroomStudyNotes = '/eclassroom_study_notes';
-  static const String eclassroomNotices = '/eclassroom_notices';
 
   // --- SYLLABUS ROUTES ---
-  static const String jambSyllabus = '/jamb_syllabus';
-  static const String jambBrochure = '/jamb_brochure';
-  static const String necoSyllabus = '/neco_syllabus';
-  static const String waecSyllabus = '/waec_syllabus';
-  static const String lessonNotes = '/lesson_notes';
   static const String privacyPolicy = '/privacy_policy';
   static const String termsOfService = '/terms_of_service';
 
@@ -129,7 +117,6 @@ class AppRoutes {
   static const String examSimulatorEntry = '/exam_simulator_entry';
 
   // --- LEGACY SIMULATOR ROUTES ---
-  static const String utmeSimulatorSelection = '/utme_simulator_selection';
   static const String utmeConfigSelection = '/utme_config_selection';
   static const String utmeSimulator = '/utme_simulator';
 
@@ -137,8 +124,9 @@ class AppRoutes {
   static const String admissionGuideline = '/admission-guideline';
   static const String admissionRequirements = '/admission-requirements';
   static const String admissionCutOffs = '/admission-cutoffs';
-
-  static const String videoSubjects = '/video_subjects';
+  static const String admissionFinder = '/admission_finder';
+  static const String admissionFinderForm = '/admission_finder_form';
+  static const String admissionFinderResults = '/admission_finder_results';
 
   static Map<String, WidgetBuilder> get staticRoutes => {
     splash: (context) => const AppStartupGate(),
@@ -146,7 +134,7 @@ class AppRoutes {
     login: (context) => const LoginScreen(),
     signup: (context) => const SignupScreen(),
     forgetPassword: (context) => const ForgetPassword(),
-    mainShell: (context) => const MainShell(),
+    mainShell: (context) => MainShell(key: MainShell.shellKey),
     store: (context) => const Store(),
     myAccount: (context) => const MyAccount(),
     settings: (context) => const AppSetting(),
@@ -180,38 +168,19 @@ class AppRoutes {
       return const Scaffold(body: Center(child: Text('Invalid arguments')));
     },
     announcements: (context) => const AnnouncementsHistoryScreen(),
-    admissionGuideline: (context) =>
-    const AdmissionGuidelineLandingScreen(),
-    admissionRequirements: (context) =>
-    const AdmissionRequirementsScreen(),
+    admissionGuideline: (context) => const AdmissionGuidelineLandingScreen(),
+    admissionRequirements: (context) => const AdmissionRequirementsScreen(),
     admissionCutOffs: (context) => const AdmissionCutOffsScreen(),
+    admissionFinder: (context) => const AdmissionFinderIntroScreen(),
+    admissionFinderForm: (context) => const AdmissionFinderFormScreen(),
+    admissionFinderResults: (context) => const AdmissionFinderResultsScreen(),
 
     // --- LEGACY SYLLABUS ROUTES ---
-    jambSyllabus: (context) => const SyllabusListScreen(
-      examType: 'jamb_s',
-      title: 'JAMB Syllabus',
-    ),
-    jambBrochure: (context) => const SyllabusListScreen(
-      examType: 'jamb_b',
-      title: 'JAMB Brochure',
-    ),
-    waecSyllabus: (context) => const SyllabusListScreen(
-      examType: 'waec',
-      title: 'WAEC Syllabus',
-    ),
-    necoSyllabus: (context) => const SyllabusListScreen(
-      examType: 'neco',
-      title: 'NECO Syllabus',
-    ),
-    lessonNotes: (context) => const SyllabusListScreen(
-      examType: 'lesson_notes',
-      title: 'Lesson Notes',
-    ),
 
     // --- PAYSTACK ROUTE ---
     paystackCheckout: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return PaystackCheckoutPage(
         checkoutUrl: args?['url'] as String? ?? '',
@@ -222,7 +191,7 @@ class AppRoutes {
     // === EXAM-FIRST ROUTES ===
     institutionSelection: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return InstitutionSelectionScreen(
         examType: args?['examType']?.toString() ?? 'post_utme',
@@ -231,7 +200,7 @@ class AppRoutes {
 
     examDashboard: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return ExamDashboardScreen(
         examType: args?['examType']?.toString() ?? 'jamb',
@@ -244,68 +213,62 @@ class AppRoutes {
 
     examSyllabus: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-      return SyllabusListScreen(
+      return StudyAndSyllabusListScreen(
         examType: args?['examType']?.toString() ?? 'jamb_s',
         title: args?['title']?.toString() ?? 'Syllabus',
       );
     },
 
-    studyNotes: (context) {
-      final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-      return StudyNotesScreen(
-        examType: args?['examType']?.toString(),
-        schoolId: args?['schoolId']?.toString(),
-      );
-    },
+    // One global list of notes; it takes no exam or institution any more.
+    studyNotes: (context) => const StudyNotesScreen(),
 
     bookmarked: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return BookmarkedQuestionsScreen(
         examType: args?['examType']?.toString(),
-        schoolId: args?['schoolId']?.toString() ??
-            args?['institutionId']?.toString(),
+        schoolId:
+            args?['schoolId']?.toString() ?? args?['institutionId']?.toString(),
       );
     },
 
     utmePerformance: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return PerformanceAnalysisScreen(
         examType: args?['examType']?.toString(),
-        schoolId: args?['schoolId']?.toString() ??
-            args?['institutionId']?.toString(),
+        schoolId:
+            args?['schoolId']?.toString() ?? args?['institutionId']?.toString(),
         sectionId: args?['sectionId']?.toString(),
       );
     },
 
     utmeHistory: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return SimulatorHistoryScreen(
         examType: args?['examType']?.toString(),
-        schoolId: args?['schoolId']?.toString() ??
-            args?['institutionId']?.toString(),
+        schoolId:
+            args?['schoolId']?.toString() ?? args?['institutionId']?.toString(),
         sectionId: args?['sectionId']?.toString(),
       );
     },
 
     examSimulatorEntry: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return _ExamSimulatorEntryScreen(
         examType: args?['examType']?.toString() ?? 'jamb',
-        institutionId: args?['institutionId']?.toString() ??
-            args?['schoolId']?.toString(),
-        institutionName: args?['institutionName']?.toString() ??
+        institutionId:
+            args?['institutionId']?.toString() ?? args?['schoolId']?.toString(),
+        institutionName:
+            args?['institutionName']?.toString() ??
             args?['schoolName']?.toString(),
         logoUrl: args?['logoUrl']?.toString(),
         sectionId: args?['sectionId']?.toString(),
@@ -314,18 +277,9 @@ class AppRoutes {
     },
 
     // --- LEGACY SIMULATOR STRINGS ---
-    utmeSimulatorSelection: (context) {
-      final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-      return InstitutionSelectionScreen(
-        examType: args?['examType']?.toString() ?? 'post_utme',
-      );
-    },
-
     utmeConfigSelection: (context) {
       final args =
-      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
       return SimulatorSessionSetup(
         examType: args?['examType']?.toString() ?? 'jamb',
@@ -341,37 +295,6 @@ class AppRoutes {
     utmeSimulator: (context) => const SimulatorScreen(),
 
     // --- ECLASSROOM ROUTES ---
-    eclassroomTests: (context) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return TestSubjectListScreen(
-        adminId: args?['adminId']?.toString() ?? '',
-      );
-    },
-    eclassroomAssignments: (context) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return AssignmentListScreen(
-        adminId: args?['adminId']?.toString() ?? '',
-        subject: args?['subject']?.toString() ?? '',
-      );
-    },
-    eclassroomStudyNotes: (context) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return StudyNoteListScreen(
-        adminId: args?['adminId']?.toString() ?? '',
-        subject: args?['subject']?.toString() ?? '',
-      );
-    },
-    eclassroomNotices: (context) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      return NoticeBoardScreen(
-        adminId: args?['adminId']?.toString() ?? '',
-      );
-    },
-    videoSubjects: (context) => const VideoSubjectsScreen(),
   };
 
   static Route<dynamic> unknownRoute(RouteSettings settings) {
@@ -477,11 +400,7 @@ class _ExamSimulatorEntryScreenState extends State<_ExamSimulatorEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CustomLoader(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CustomLoader()));
   }
 }
 
@@ -492,10 +411,7 @@ class _ExamSimulatorEntryScreenState extends State<_ExamSimulatorEntryScreen> {
 class NotFoundScreen extends StatelessWidget {
   final String? routeName;
 
-  const NotFoundScreen({
-    super.key,
-    this.routeName,
-  });
+  const NotFoundScreen({super.key, this.routeName});
 
   @override
   Widget build(BuildContext context) {
@@ -510,10 +426,7 @@ class NotFoundScreen extends StatelessWidget {
       backgroundColor: bgColor,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 24.0,
-            vertical: 24.0,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -578,10 +491,9 @@ class NotFoundScreen extends StatelessWidget {
                 label: 'Go Home',
                 backgroundColor: btnBgColor,
                 onPressed: () {
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/',
-                        (route) => false,
-                  );
+                  Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil('/', (route) => false);
                 },
               ),
               const SizedBox(height: 10),

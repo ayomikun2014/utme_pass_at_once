@@ -66,12 +66,18 @@ class CustomBtn extends StatelessWidget {
                   Icon(icon, color: effectiveTextColor, size: 20),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: effectiveTextColor,
+                // Flexible so a long label on a narrow button, or a large
+                // system font setting, ellipsizes instead of overflowing.
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: effectiveTextColor,
+                    ),
                   ),
                 ),
               ],

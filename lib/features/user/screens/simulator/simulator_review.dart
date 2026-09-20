@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:utme_pass_at_once/core/constants/app_colors.dart';
 import 'package:utme_pass_at_once/features/user/models/question_model.dart';
 import 'package:utme_pass_at_once/core/utils/rich_content_renderer.dart';
 
@@ -29,6 +30,67 @@ class _SimulatorReviewScreenState extends State<SimulatorReviewScreen>
 
   // Filter options: all, correct, wrong, skipped
   String _filter = 'all';
+
+  void _showPassageDialog(BuildContext context, Passage passage) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.surfaceDark : theme.scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      passage.label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (passage.title != null && passage.title!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        passage.title!,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: RichContentRenderer(
+                blocks: passage.content,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -591,8 +653,11 @@ class _SimulatorReviewScreenState extends State<SimulatorReviewScreen>
     final isFirst = _currentQuestionIndex == 0;
     final isLast = _currentQuestionIndex >= filteredIndices.length - 1;
 
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final double safeBottom = bottomPadding > 0 ? bottomPadding + 12.0 : 26.0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, safeBottom),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         boxShadow: [
@@ -770,6 +835,73 @@ class _SimulatorReviewScreenState extends State<SimulatorReviewScreen>
                 ],
               ),
               const SizedBox(height: 16),
+              if (question.passage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _showPassageDialog(context, question.passage!),
+                      icon: const Icon(Icons.menu_book_rounded, size: 18),
+                      label: Text(
+                        question.passage!.label,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: theme.colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        backgroundColor: theme.brightness == Brightness.dark
+                            ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                            : theme.colorScheme.primary.withValues(alpha: 0.05),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          side: BorderSide(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (question.instruction != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: theme.brightness == Brightness.dark
+                          ? theme.colorScheme.primary.withValues(alpha: 0.15)
+                          : theme.colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          question.instruction!.label,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        RichContentRenderer(
+                          blocks: question.instruction!.content,
+                          textStyle: TextStyle(
+                            fontSize: 13,
+                            color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               RichContentRenderer(
                 blocks: question.content,
               ),
@@ -1089,10 +1221,10 @@ class _SimulatorReviewScreenState extends State<SimulatorReviewScreen>
           RichContentRenderer(
             blocks: question.explanation,
             textStyle: TextStyle(
-              fontSize: 16,
-              height: 1.6,
-              fontWeight: FontWeight.bold,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+              fontSize: 14,
+              height: 1.5,
+              fontWeight: FontWeight.normal,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
             ),
           ),
         ],

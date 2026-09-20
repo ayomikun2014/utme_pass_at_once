@@ -9,6 +9,7 @@ import '../../providers/simulator_provider.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 import 'package:utme_pass_at_once/core/utils/rich_content_renderer.dart';
 import '../../../../core/constants/app_colors.dart';
+
 class BookmarkedQuestionsScreen extends StatefulWidget {
   final String? examType;
   final String? schoolId;
@@ -50,8 +51,6 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
     _searchController.dispose();
     super.dispose();
   }
-
-
 
   String _baseInstitutionId(String id) {
     final lower = id.toLowerCase().trim();
@@ -113,9 +112,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
           .replaceAll('_', ' ')
           .split(' ')
           .map((word) {
-        if (word.isEmpty) return word;
-        return '${word[0].toUpperCase()}${word.substring(1)}';
-      })
+            if (word.isEmpty) return word;
+            return '${word[0].toUpperCase()}${word.substring(1)}';
+          })
           .join(' ');
 
       return '$sectionName Local Bookmarks';
@@ -149,17 +148,15 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
       bookmarks = bookmarks.where((bookmark) {
         final rawInstitution =
             bookmark['institutionId']?.toString() ??
-                bookmark['centerCode']?.toString() ??
-                bookmark['schoolId']?.toString();
+            bookmark['centerCode']?.toString() ??
+            bookmark['schoolId']?.toString();
 
         if (rawInstitution == null) return true;
 
         final bookmarkBaseInstitution = _baseInstitutionId(rawInstitution);
 
-        final bookmarkSectionId = bookmark['sectionId']
-            ?.toString()
-            .toLowerCase()
-            .trim() ??
+        final bookmarkSectionId =
+            bookmark['sectionId']?.toString().toLowerCase().trim() ??
             _sectionIdFromKey(rawInstitution);
 
         final sameInstitution = bookmarkBaseInstitution == targetBaseSchoolId;
@@ -236,28 +233,23 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
   }
 
   Future<void> _removeBookmark(
-      QuestionModel question,
-      String subject,
-      Map<String, dynamic>? sourceBookmark,
-      ) async {
+    QuestionModel question,
+    String subject,
+    Map<String, dynamic>? sourceBookmark,
+  ) async {
     final provider = context.read<SimulatorProvider>();
 
-    final examType = sourceBookmark?['examType']?.toString() ??
-        widget.examType ??
-        'jamb';
+    final examType =
+        sourceBookmark?['examType']?.toString() ?? widget.examType ?? 'jamb';
 
-    final institutionId = sourceBookmark?['institutionId']?.toString() ??
+    final institutionId =
+        sourceBookmark?['institutionId']?.toString() ??
         sourceBookmark?['centerCode']?.toString() ??
         sourceBookmark?['schoolId']?.toString() ??
         _effectiveInstitutionForAction() ??
         'jamb';
 
-    await provider.toggleBookmark(
-      question,
-      subject,
-      examType,
-      institutionId,
-    );
+    await provider.toggleBookmark(question, subject, examType, institutionId);
 
     await _loadBookmarks();
 
@@ -272,9 +264,7 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
             Container(
@@ -283,10 +273,7 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                 color: Colors.red.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.warning_amber_rounded,
-                color: Colors.red,
-              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Colors.red),
             ),
             const SizedBox(width: 10),
             const Text('Clear Bookmarks?'),
@@ -336,11 +323,11 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
 
         final subject = bookmark['subject']?.toString() ?? '';
 
-        final examType = bookmark['examType']?.toString() ??
-            widget.examType ??
-            'jamb';
+        final examType =
+            bookmark['examType']?.toString() ?? widget.examType ?? 'jamb';
 
-        final institutionId = bookmark['institutionId']?.toString() ??
+        final institutionId =
+            bookmark['institutionId']?.toString() ??
             bookmark['centerCode']?.toString() ??
             bookmark['schoolId']?.toString() ??
             _effectiveInstitutionForAction() ??
@@ -408,23 +395,23 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                     hintText: 'Search questions...',
                                     prefixIcon: const Icon(Icons.search),
                                     suffixIcon:
-                                    _searchController.text.isNotEmpty
+                                        _searchController.text.isNotEmpty
                                         ? IconButton(
-                                      icon: const Icon(
-                                        Icons.clear,
-                                        size: 20,
-                                      ),
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        FocusScope.of(context)
-                                            .unfocus();
-                                      },
-                                    )
+                                            icon: const Icon(
+                                              Icons.clear,
+                                              size: 20,
+                                            ),
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              FocusScope.of(context).unfocus();
+                                            },
+                                          )
                                         : null,
                                     filled: true,
                                     fillColor: theme.colorScheme.surface,
-                                    contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 0),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 0,
+                                    ),
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(30),
                                       borderSide: BorderSide(
@@ -448,8 +435,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                   color: theme.colorScheme.surface,
                                   borderRadius: BorderRadius.circular(30),
                                   border: Border.all(
-                                    color: theme.colorScheme.primary
-                                        .withValues(alpha: 0.1),
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.1,
+                                    ),
                                   ),
                                 ),
                                 child: IconButton(
@@ -481,11 +469,10 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                               scrollDirection: Axis.horizontal,
                               itemCount: _availableSubjects.length,
                               separatorBuilder: (context, index) =>
-                              const SizedBox(width: 8),
+                                  const SizedBox(width: 8),
                               itemBuilder: (context, index) {
                                 final subject = _availableSubjects[index];
-                                final isSelected =
-                                    _selectedSubject == subject;
+                                final isSelected = _selectedSubject == subject;
 
                                 return ChoiceChip(
                                   label: Text(subject),
@@ -544,42 +531,34 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                   )
                 else if (_allBookmarks.isEmpty)
                   SliverFillRemaining(
-                    child: _buildEmptyState(
-                      theme,
-                      isGlobalEmpty: true,
-                    ),
+                    child: _buildEmptyState(theme, isGlobalEmpty: true),
                   )
                 else if (_filteredBookmarks.isEmpty)
-                    SliverFillRemaining(
-                      child: _buildEmptyState(
-                        theme,
-                        isGlobalEmpty: false,
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.all(16),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                            final item = _filteredBookmarks[index];
-                            final subject = item['subject']?.toString() ?? '';
-                            final qMap =
-                            Map<String, dynamic>.from(item['question']);
-                            final question = QuestionModel.fromFullJson(qMap);
+                  SliverFillRemaining(
+                    child: _buildEmptyState(theme, isGlobalEmpty: false),
+                  )
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.all(16),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        final item = _filteredBookmarks[index];
+                        final subject = item['subject']?.toString() ?? '';
+                        final qMap = Map<String, dynamic>.from(
+                          item['question'],
+                        );
+                        final question = QuestionModel.fromFullJson(qMap);
 
-                            return _buildBookmarkCard(
-                              theme,
-                              isDark,
-                              question,
-                              subject,
-                              item,
-                            );
-                          },
-                          childCount: _filteredBookmarks.length,
-                        ),
-                      ),
+                        return _buildBookmarkCard(
+                          theme,
+                          isDark,
+                          question,
+                          subject,
+                          item,
+                        );
+                      }, childCount: _filteredBookmarks.length),
                     ),
+                  ),
               ],
             ),
           ),
@@ -588,10 +567,7 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
     );
   }
 
-  Widget _buildEmptyState(
-      ThemeData theme, {
-        required bool isGlobalEmpty,
-      }) {
+  Widget _buildEmptyState(ThemeData theme, {required bool isGlobalEmpty}) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -667,7 +643,12 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => _showQuestionDetailBottomSheet(question, subject, year, sourceBookmark),
+          onTap: () => _showQuestionDetailBottomSheet(
+            question,
+            subject,
+            year,
+            sourceBookmark,
+          ),
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -677,7 +658,10 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
@@ -699,11 +683,8 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                       ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      onPressed: () => _removeBookmark(
-                        question,
-                        subject,
-                        sourceBookmark,
-                      ),
+                      onPressed: () =>
+                          _removeBookmark(question, subject, sourceBookmark),
                       tooltip: 'Remove Bookmark',
                     ),
                   ],
@@ -747,6 +728,67 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
     );
   }
 
+  void _showPassageDialog(BuildContext context, Passage passage) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark
+              ? AppColors.surfaceDark
+              : theme.scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      passage.label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (passage.title != null && passage.title!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        passage.title!,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: RichContentRenderer(blocks: passage.content),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showQuestionDetailBottomSheet(
     QuestionModel question,
     String subject,
@@ -766,8 +808,12 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
             return Container(
               height: MediaQuery.of(context).size.height * 0.85,
               decoration: BoxDecoration(
-                color: isDark ? AppColors.surfaceDark : theme.colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                color: isDark
+                    ? AppColors.surfaceDark
+                    : theme.colorScheme.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 border: Border.all(
                   color: isDark ? AppColors.dividerDark : Colors.transparent,
                   width: 1.5,
@@ -780,7 +826,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                     width: 40,
                     height: 4.5,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.15),
+                      color: theme.colorScheme.onSurface.withValues(
+                        alpha: 0.15,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -807,7 +855,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                 style: GoogleFonts.plusJakartaSans(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
-                                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                                  color: theme.colorScheme.onSurface.withValues(
+                                    alpha: 0.5,
+                                  ),
                                 ),
                               ),
                             ],
@@ -817,7 +867,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                           icon: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.05,
+                              ),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.close_rounded, size: 20),
@@ -829,17 +881,116 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                   ),
                   const SizedBox(height: 10),
                   Divider(
-                    color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                    color: isDark
+                        ? AppColors.dividerDark
+                        : Colors.grey.shade200,
                     thickness: 1,
                     height: 1,
                   ),
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        20,
+                        20,
+                        20 + MediaQuery.of(context).viewPadding.bottom,
+                      ),
                       physics: const BouncingScrollPhysics(),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if (question.passage != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: TextButton.icon(
+                                onPressed: () => _showPassageDialog(
+                                  context,
+                                  question.passage!,
+                                ),
+                                icon: const Icon(
+                                  Icons.menu_book_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  question.passage!.label,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: theme.colorScheme.primary,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  backgroundColor: isDark
+                                      ? theme.colorScheme.primary.withValues(
+                                          alpha: 0.15,
+                                        )
+                                      : theme.colorScheme.primary.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                    side: BorderSide(
+                                      color: theme.colorScheme.primary
+                                          .withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ] else if (question.instruction != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? theme.colorScheme.primary.withValues(
+                                          alpha: 0.15,
+                                        )
+                                      : theme.colorScheme.primary.withValues(
+                                          alpha: 0.05,
+                                        ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.25,
+                                    ),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      question.instruction!.label,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    RichContentRenderer(
+                                      blocks: question.instruction!.content,
+                                      textStyle: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? Colors.white70
+                                            : Colors.black87,
+                                        fontWeight: FontWeight.normal,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                           RichContentRenderer(
                             blocks: question.content,
                             textStyle: GoogleFonts.plusJakartaSans(
@@ -851,23 +1002,39 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                           ),
                           const SizedBox(height: 20),
                           Column(
-                            children: List.generate(question.options.length, (index) {
+                            children: List.generate(question.options.length, (
+                              index,
+                            ) {
                               final optionLetter = question.options[index].key;
-                              final optionBlocks = question.options[index].content;
-                              final isCorrect = optionLetter == question.correctAnswer;
+                              final optionBlocks =
+                                  question.options[index].content;
+                              final isCorrect =
+                                  optionLetter == question.correctAnswer;
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: isCorrect
-                                      ? (isDark ? Colors.green.withValues(alpha: 0.08) : Colors.green.shade50.withValues(alpha: 0.6))
-                                      : (isDark ? Colors.white.withValues(alpha: 0.02) : Colors.grey.shade50),
+                                      ? (isDark
+                                            ? Colors.green.withValues(
+                                                alpha: 0.08,
+                                              )
+                                            : Colors.green.shade50.withValues(
+                                                alpha: 0.6,
+                                              ))
+                                      : (isDark
+                                            ? Colors.white.withValues(
+                                                alpha: 0.02,
+                                              )
+                                            : Colors.grey.shade50),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
                                     color: isCorrect
                                         ? Colors.green.withValues(alpha: 0.3)
-                                        : (isDark ? AppColors.dividerDark : Colors.grey.shade200),
+                                        : (isDark
+                                              ? AppColors.dividerDark
+                                              : Colors.grey.shade200),
                                     width: isCorrect ? 1.5 : 1,
                                   ),
                                 ),
@@ -880,7 +1047,8 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                       decoration: BoxDecoration(
                                         color: isCorrect
                                             ? Colors.green
-                                            : theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                                            : theme.colorScheme.onSurface
+                                                  .withValues(alpha: 0.06),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Center(
@@ -889,7 +1057,10 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                           style: GoogleFonts.plusJakartaSans(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13,
-                                            color: isCorrect ? Colors.white : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                                            color: isCorrect
+                                                ? Colors.white
+                                                : theme.colorScheme.onSurface
+                                                      .withValues(alpha: 0.7),
                                           ),
                                         ),
                                       ),
@@ -900,11 +1071,13 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                         padding: const EdgeInsets.only(top: 2),
                                         child: RichContentRenderer(
                                           blocks: optionBlocks,
-                                          textStyle: GoogleFonts.plusJakartaSans(
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: theme.colorScheme.onSurface,
-                                          ),
+                                          textStyle:
+                                              GoogleFonts.plusJakartaSans(
+                                                fontSize: 14.5,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    theme.colorScheme.onSurface,
+                                              ),
                                         ),
                                       ),
                                     ),
@@ -915,14 +1088,18 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                           ),
                           const SizedBox(height: 16),
                           Divider(
-                            color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                            color: isDark
+                                ? AppColors.dividerDark
+                                : Colors.grey.shade200,
                           ),
                           const SizedBox(height: 16),
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: isDark ? Colors.green.withValues(alpha: 0.1) : Colors.green.shade50,
+                              color: isDark
+                                  ? Colors.green.withValues(alpha: 0.1)
+                                  : Colors.green.shade50,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: Colors.green.withValues(alpha: 0.25),
@@ -952,7 +1129,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                       style: GoogleFonts.plusJakartaSans(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 14,
-                                        color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                        color: isDark
+                                            ? Colors.green.shade300
+                                            : Colors.green.shade800,
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -961,7 +1140,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                       style: GoogleFonts.plusJakartaSans(
                                         fontWeight: FontWeight.w900,
                                         fontSize: 18,
-                                        color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                        color: isDark
+                                            ? Colors.green.shade300
+                                            : Colors.green.shade800,
                                       ),
                                     ),
                                   ],
@@ -973,7 +1154,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                     style: GoogleFonts.plusJakartaSans(
                                       fontWeight: FontWeight.w800,
                                       fontSize: 13,
-                                      color: isDark ? Colors.green.shade300 : Colors.green.shade800,
+                                      color: isDark
+                                          ? Colors.green.shade300
+                                          : Colors.green.shade800,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
@@ -983,7 +1166,8 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                                       fontSize: 14,
                                       height: 1.5,
                                       fontWeight: FontWeight.w600,
-                                      color: theme.colorScheme.onSurface.withValues(alpha: 0.95),
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.95),
                                     ),
                                   ),
                                 ],
@@ -996,7 +1180,9 @@ class _BookmarkedQuestionsScreenState extends State<BookmarkedQuestionsScreen> {
                     ),
                   ),
                   Divider(
-                    color: isDark ? AppColors.dividerDark : Colors.grey.shade200,
+                    color: isDark
+                        ? AppColors.dividerDark
+                        : Colors.grey.shade200,
                     height: 1,
                   ),
                   Container(

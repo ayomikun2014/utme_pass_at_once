@@ -24,7 +24,7 @@ class SelectPayment extends StatefulWidget {
 
 
 class _SelectPaymentState extends State<SelectPayment> {
-  int selectedIndex = 0; // Default to Paystack
+  int selectedIndex = 0; // Default to online payment
   bool _isProcessing = false;
   final ScrollController _scrollController = ScrollController();
   bool _hasScrolledToBottom = false;
@@ -143,7 +143,7 @@ class _SelectPaymentState extends State<SelectPayment> {
             children: [
               _buildPaymentItem(
                 index: 0,
-                title: 'Paystack',
+                title: 'Online Payment',
                 icon: Icons.credit_card_rounded,
                 iconColor: Colors.blue,
                 subtitle: isGatewayEnabled ? null : 'Coming soon',
@@ -151,7 +151,7 @@ class _SelectPaymentState extends State<SelectPayment> {
               ),
               _buildPaymentItem(
                 index: 1,
-                title: 'Manual Transfer',
+                title: 'Manual Payment',
                 icon: Icons.account_balance_rounded,
                 iconColor: Colors.grey,
               ),

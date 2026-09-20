@@ -6,6 +6,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../models/question_model.dart';
 import '../models/question_bank_model.dart';
 import '../../auth/models/user_model.dart';
+import 'package:utme_pass_at_once/core/services/backend_api.dart';
 
 class SimulatorService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -269,10 +270,21 @@ class SimulatorService {
   // FULL ACTIVATION DOWNLOAD (DYNAMIC ARCHITECTURE)
   // =========================================================================
 
+  /// A subject written any which way -- "Use of English", "use_of_english" --
+  /// reduced to one comparable key.
+  static String subjectKey(String subject) => subject
+      .toLowerCase()
+      .trim()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_+|_+$'), '');
+
   Future<void> downloadAndCacheAllActivationData({
     required String examType,
     required String institutionId,
-    // REMOVED: required List<String> subjects, (We fetch dynamically now)
+    /// The subjects this reader actually bought. Only these are downloaded;
+    /// leave it null or empty and the whole bank comes down, which is what
+    /// happens for packages saved before subjects were recorded.
+    List<String>? subjects,
     String? sectionId,
     bool force = false,
     required void Function(int current, int total) onProgress,
@@ -312,17 +324,40 @@ class SimulatorService {
     }).toList()
         : allSubjects;
 
+    currentStep++;
+
+    // Narrow to what was bought. A subject is kept if its id or its name
+    // matches one of them; if none match (an older package, or a name the
+    // bank no longer uses) everything is kept rather than nothing.
+    final wanted = (subjects ?? const <String>[])
+        .map(subjectKey)
+        .where((s) => s.isNotEmpty)
+        .toSet();
+    final owned = wanted.isEmpty
+        ? subjectsToCache
+        : subjectsToCache
+            .where((s) =>
+                wanted.contains(subjectKey(s.id)) || wanted.contains(subjectKey(s.name)))
+            .toList();
+    final purchasedOnly = owned.isNotEmpty && owned.length < subjectsToCache.length;
+    if (wanted.isNotEmpty && owned.isEmpty) {
+      debugPrint(
+        '⚡ [ACTIVATION] None of $wanted matched the bank; downloading every subject.',
+      );
+    }
+    final selectedSubjects = owned.isEmpty ? subjectsToCache : owned;
+
     await cacheSubjects(
       normalized,
       baseInstitutionId,
-      subjectsToCache,
+      selectedSubjects,
       sectionId: sectionId,
     );
-    currentStep++;
 
-    // EXTRACT dynamic subject list directly from Firestore data
-    final dynamicSubjects = subjectsToCache.map((s) => s.id).toList();
-    debugPrint('⚡ [ACTIVATION] Dynamically found subjects: $dynamicSubjects');
+    final dynamicSubjects = selectedSubjects.map((s) => s.id).toList();
+    debugPrint(
+      '⚡ [ACTIVATION] Subjects to download (${purchasedOnly ? 'purchased' : 'all'}): $dynamicSubjects',
+    );
 
     // Step 3: Available years
     final Map<String, List<String>> allYearsMap = {};
@@ -383,21 +418,28 @@ class SimulatorService {
           '⚡ [ACTIVATION] Downloading questions: $subject/$year (force=$force)...',
         );
 
-        try {
-          await downloadAndCacheQuestions(
-            examType: normalized,
-            institutionId: baseInstitutionId,
-            year: year,
-            subject: subject,
-            force: force,
-          );
-        } catch (e) {
-          debugPrint(
-            '⚡ [ACTIVATION] ⚠️ Failed to download $subject/$year: $e',
-          );
-          // If a download fails, you might want to throw the error up so the UI
-          // knows the overall download did not complete successfully.
-          rethrow;
+        // A weak connection drops single requests now and then; one of those
+        // used to abort the whole package. Retry the brief ones with a short
+        // back-off, and only give up if the year keeps failing.
+        for (var attempt = 1; ; attempt++) {
+          try {
+            await downloadAndCacheQuestions(
+              examType: normalized,
+              institutionId: baseInstitutionId,
+              year: year,
+              subject: subject,
+              force: force,
+            );
+            break;
+          } catch (e) {
+            final transient = _isTransient(e);
+            debugPrint(
+              '⚡ [ACTIVATION] ⚠️ Failed to download $subject/$year '
+              '(attempt $attempt${transient ? ', will retry' : ''}): $e',
+            );
+            if (!transient || attempt >= 4) rethrow;
+            await Future.delayed(Duration(seconds: 2 << (attempt - 1)));
+          }
         }
 
         currentStep++;
@@ -407,6 +449,18 @@ class SimulatorService {
     debugPrint(
       '⚡ [ACTIVATION] ✅ Full activation download complete! ($currentStep/$totalSteps steps)',
     );
+  }
+
+  /// Errors worth retrying: the network or Firestore briefly unavailable.
+  static bool _isTransient(Object e) {
+    if (e is FirebaseException) {
+      return const {'unavailable', 'deadline-exceeded', 'aborted', 'internal', 'resource-exhausted'}
+          .contains(e.code);
+    }
+    final text = e.toString();
+    return text.contains('SocketException') ||
+        text.contains('TimeoutException') ||
+        text.contains('unavailable');
   }
 
   Future<bool> isActivatedPackageDownloaded({
@@ -530,15 +584,26 @@ class SimulatorService {
           } else if (force) {
             // Check if the server content has changed
             try {
-              final docRef = _firestore
-                  .collection('questionBank')
-                  .doc(normalized)
-                  .collection('institutions')
-                  .doc(baseInstitutionId)
-                  .collection('subjects')
-                  .doc(_normalizeSubjectId(subject))
-                  .collection('years')
-                  .doc(year);
+              final DocumentReference<Map<String, dynamic>> docRef;
+              if (normalized != 'post_utme') {
+                docRef = _firestore
+                    .collection('questionBank')
+                    .doc(normalized)
+                    .collection('subjects')
+                    .doc(_normalizeSubjectId(subject))
+                    .collection('years')
+                    .doc(year);
+              } else {
+                docRef = _firestore
+                    .collection('questionBank')
+                    .doc(normalized)
+                    .collection('institutions')
+                    .doc(baseInstitutionId)
+                    .collection('subjects')
+                    .doc(_normalizeSubjectId(subject))
+                    .collection('years')
+                    .doc(year);
+              }
               
               final docSnapshot = await docRef.get(const GetOptions(source: Source.server));
               if (docSnapshot.exists) {
@@ -562,6 +627,8 @@ class SimulatorService {
                       institutionId: baseInstitutionId,
                       subjectId: _normalizeSubjectId(subject),
                       year: int.tryParse(year) ?? 0,
+                      passages: yearModel.passages,
+                      instructions: yearModel.instructions,
                     );
                   }).toList();
 
@@ -616,6 +683,17 @@ class SimulatorService {
       ) async {
     try {
       final normalized = examType.toLowerCase().trim();
+      if (normalized != 'post_utme') {
+        final displayName = normalized == 'jamb' ? 'JAMB UTME' : normalized.toUpperCase();
+        return [
+          InstitutionModel(
+            id: normalized,
+            name: displayName,
+            logo: null,
+            totalSubjects: 4,
+          )
+        ];
+      }
 
       final snapshot = await _firestore
           .collection('questionBank')
@@ -645,13 +723,22 @@ class SimulatorService {
       final normalized = examType.toLowerCase().trim();
       final baseInstitutionId = _getBaseInstitutionId(institutionId);
 
-      final snapshot = await _firestore
-          .collection('questionBank')
-          .doc(normalized)
-          .collection('institutions')
-          .doc(baseInstitutionId)
-          .collection('subjects')
-          .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
+      final QuerySnapshot<Map<String, dynamic>> snapshot;
+      if (normalized != 'post_utme') {
+        snapshot = await _firestore
+            .collection('questionBank')
+            .doc(normalized)
+            .collection('subjects')
+            .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
+      } else {
+        snapshot = await _firestore
+            .collection('questionBank')
+            .doc(normalized)
+            .collection('institutions')
+            .doc(baseInstitutionId)
+            .collection('subjects')
+            .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
+      }
 
       if (snapshot.docs.isNotEmpty) {
         return snapshot.docs.map((doc) {
@@ -677,19 +764,26 @@ class SimulatorService {
       final baseInstitutionId = _getBaseInstitutionId(institutionId);
       final subjectId = _normalizeSubjectId(subject);
 
-      final path =
-          'questionBank/$normalized/institutions/$baseInstitutionId/subjects/$subjectId';
+      final DocumentReference<Map<String, dynamic>> docRef;
+      if (normalized != 'post_utme') {
+        docRef = _firestore
+            .collection('questionBank')
+            .doc(normalized)
+            .collection('subjects')
+            .doc(subjectId);
+      } else {
+        docRef = _firestore
+            .collection('questionBank')
+            .doc(normalized)
+            .collection('institutions')
+            .doc(baseInstitutionId)
+            .collection('subjects')
+            .doc(subjectId);
+      }
 
-      debugPrint('📅 getAvailableYears: Querying subject doc: $path');
+      debugPrint('📅 getAvailableYears: Querying subject doc: ${docRef.path}');
 
-      final doc = await _firestore
-          .collection('questionBank')
-          .doc(normalized)
-          .collection('institutions')
-          .doc(baseInstitutionId)
-          .collection('subjects')
-          .doc(subjectId)
-          .get(GetOptions(source: force ? Source.server : Source.serverAndCache));
+      final doc = await docRef.get(GetOptions(source: force ? Source.server : Source.serverAndCache));
 
       if (doc.exists) {
         final data = doc.data();
@@ -731,15 +825,26 @@ class SimulatorService {
     final baseInstitutionId = _getBaseInstitutionId(institutionId);
     final subjectId = _normalizeSubjectId(subject);
 
-    final docRef = _firestore
-        .collection('questionBank')
-        .doc(normalized)
-        .collection('institutions')
-        .doc(baseInstitutionId)
-        .collection('subjects')
-        .doc(subjectId)
-        .collection('years')
-        .doc(year);
+    final DocumentReference<Map<String, dynamic>> docRef;
+    if (normalized != 'post_utme') {
+      docRef = _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('subjects')
+          .doc(subjectId)
+          .collection('years')
+          .doc(year);
+    } else {
+      docRef = _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('institutions')
+          .doc(baseInstitutionId)
+          .collection('subjects')
+          .doc(subjectId)
+          .collection('years')
+          .doc(year);
+    }
 
     final docSnapshot = await docRef.get();
 
@@ -761,6 +866,8 @@ class SimulatorService {
         institutionId: baseInstitutionId,
         subjectId: subjectId,
         year: int.tryParse(year) ?? 0,
+        passages: yearModel.passages,
+        instructions: yearModel.instructions,
       );
     }).toList();
   }
@@ -770,6 +877,16 @@ class SimulatorService {
       ) async {
     try {
       final normalized = examType.toLowerCase().trim();
+
+      if (normalized != 'post_utme') {
+        final displayName = normalized == 'jamb' ? 'JAMB UTME' : normalized.toUpperCase();
+        return {
+          normalized: {
+            'name': displayName,
+            'logo': null,
+          }
+        };
+      }
 
       final snapshot = await _firestore
           .collection('questionBank')
@@ -833,14 +950,12 @@ class SimulatorService {
     }
 
     // --- FALLBACK FOR FREE PRE-DOWNLOADED QUESTIONS ---
-    if (subject == 'aptitude') {
-      final freeKey = 'free_aptitude_$year';
-      if (box.containsKey(freeKey)) {
-        final existingData = box.get(freeKey);
-        if (existingData != null) {
-          final List<dynamic> decodedList = json.decode(existingData);
-          if (decodedList.isNotEmpty) return true;
-        }
+    final freeKey = 'free_${subject}_$year';
+    if (box.containsKey(freeKey)) {
+      final existingData = box.get(freeKey);
+      if (existingData != null) {
+        final List<dynamic> decodedList = json.decode(existingData);
+        if (decodedList.isNotEmpty) return true;
       }
     }
 
@@ -886,15 +1001,26 @@ class SimulatorService {
       }
     }
 
-    final docRef = _firestore
-        .collection('questionBank')
-        .doc(normalized)
-        .collection('institutions')
-        .doc(baseInstitutionId)
-        .collection('subjects')
-        .doc(subjectId)
-        .collection('years')
-        .doc(year);
+    final DocumentReference<Map<String, dynamic>> docRef;
+    if (normalized != 'post_utme') {
+      docRef = _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('subjects')
+          .doc(subjectId)
+          .collection('years')
+          .doc(year);
+    } else {
+      docRef = _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('institutions')
+          .doc(baseInstitutionId)
+          .collection('subjects')
+          .doc(subjectId)
+          .collection('years')
+          .doc(year);
+    }
 
     debugPrint('Fetching year document from (force=$force): ${docRef.path}');
 
@@ -928,6 +1054,8 @@ class SimulatorService {
         institutionId: baseInstitutionId,
         subjectId: subjectId,
         year: int.tryParse(year) ?? 0,
+        passages: yearModel.passages,
+        instructions: yearModel.instructions,
       );
     }).toList();
 
@@ -942,9 +1070,14 @@ class SimulatorService {
       }
     }
 
-    if (yearModel.hasImage && !kIsWeb) {
+    // Every picture a reader may see offline: the question, its options, the
+    // explanation, and the passage or reference the question hangs off --
+    // those two carry diagrams of their own in subjects like physics. The
+    // year's `hasImage` flag is not trusted here: it is set from the question
+    // images alone, so a diagram that lives only on a reference would be left
+    // behind.
+    if (!kIsWeb) {
       final List<Future<dynamic>> imageDownloads = [];
-      const bucket = 'utme-pass-at-once-36340.firebasestorage.app';
 
       for (final q in questions) {
         void addDownloadTask(String? rawSrc) {
@@ -953,9 +1086,7 @@ class SimulatorService {
           String src = rawSrc;
 
           if (!rawSrc.startsWith('http') && !rawSrc.startsWith('assets/')) {
-            final encodedPath = Uri.encodeComponent(rawSrc);
-            src =
-            'https://firebasestorage.googleapis.com/v0/b/$bucket/o/$encodedPath?alt=media';
+            src = BackendApi.publicFileUrl(rawSrc);
           }
 
           if (src.startsWith('http')) {
@@ -980,6 +1111,24 @@ class SimulatorService {
             if (block.isImage) {
               addDownloadTask(block.src);
             }
+          }
+        }
+
+        for (final block in q.explanation) {
+          if (block.isImage) {
+            addDownloadTask(block.src);
+          }
+        }
+
+        for (final block in q.passage?.content ?? const []) {
+          if (block.isImage) {
+            addDownloadTask(block.src);
+          }
+        }
+
+        for (final block in q.instruction?.content ?? const []) {
+          if (block.isImage) {
+            addDownloadTask(block.src);
           }
         }
 
@@ -1014,11 +1163,11 @@ class SimulatorService {
     var data = box.get(cacheKey);
 
     // --- FALLBACK FOR FREE PRE-DOWNLOADED QUESTIONS ---
-    if (data == null && subject == 'aptitude') {
-      final freeKey = 'free_aptitude_$year';
+    if (data == null) {
+      final freeKey = 'free_${subject}_$year';
       data = box.get(freeKey);
       if (data != null) {
-        debugPrint('📦 [OFFLINE] Loaded free aptitude questions from key: $freeKey');
+        debugPrint('📦 [OFFLINE] Loaded free questions from key: $freeKey');
       }
     }
 
@@ -1375,14 +1524,16 @@ class SimulatorService {
     await box.deleteAll(keysToDelete);
   }
 
-  Future<void> predownloadFreeAptitudeQuestions() async {
+  Future<void> predownloadFreeQuestions() async {
     try {
-      final years = ['2023', '2024'];
+      final freeYears = ['2014'];
       final box = await Hive.openBox<String>(_boxName);
       final yearsBox = await Hive.openBox<String>(_yearsBoxName);
 
-      // Save available years for free offline aptitude
-      await yearsBox.put('free_aptitude_years', json.encode(years));
+      // Save available years for free offline subjects (just ['2014'])
+      await yearsBox.put('free_aptitude_years', json.encode(freeYears));
+      await yearsBox.put('free_use_of_english_years', json.encode(freeYears));
+      await yearsBox.put('free_english_language_years', json.encode(freeYears));
 
       // --- Caching institutions for free offline use ---
       try {
@@ -1405,42 +1556,40 @@ class SimulatorService {
         debugPrint('⚠️ [PRE-DOWNLOAD] Failed to cache institutions: $e');
       }
 
-      // Try 'oau' as the primary source for aptitude questions
-      final primaryInst = 'oau';
+      // Defining free download targets (Oldest year 2014 only)
+      final targets = [
+        {'examType': 'post_utme', 'institutionId': 'oau', 'subject': 'aptitude'},
+        {'examType': 'jamb', 'institutionId': 'jamb', 'subject': 'use_of_english'},
+        {'examType': 'waec', 'institutionId': 'waec', 'subject': 'english_language'},
+        {'examType': 'neco', 'institutionId': 'neco', 'subject': 'english_language'},
+      ];
 
-      for (final year in years) {
-        debugPrint('⏳ [PRE-DOWNLOAD] Checking if free aptitude questions for $year are cached...');
-        final cacheKey = 'free_aptitude_$year';
+      for (final target in targets) {
+        final examType = target['examType']!;
+        final instId = target['institutionId']!;
+        final subject = target['subject']!;
+        final year = '2014';
+        final cacheKey = 'free_${subject}_$year';
+
         if (box.containsKey(cacheKey)) {
           final cachedData = box.get(cacheKey);
           if (cachedData != null && cachedData.isNotEmpty) {
-            debugPrint('📦 [PRE-DOWNLOAD] Aptitude $year is already cached. Skipping.');
+            debugPrint('📦 [PRE-DOWNLOAD] $subject $year is already cached. Skipping.');
             continue;
           }
         }
 
-        debugPrint('⏳ [PRE-DOWNLOAD] Downloading free aptitude questions for $year...');
+        debugPrint('⏳ [PRE-DOWNLOAD] Downloading free questions for $examType/$instId/$subject $year...');
         List<QuestionModel> questions = [];
         try {
           questions = await fetchQuestionsOnline(
-            examType: 'post_utme',
-            institutionId: primaryInst,
-            subject: 'aptitude',
+            examType: examType,
+            institutionId: instId,
+            subject: subject,
             year: year,
           );
         } catch (e) {
-          debugPrint('⚠️ [PRE-DOWNLOAD] Failed to download from $primaryInst for $year: $e');
-          // Try 'ui' as a backup fallback
-          try {
-            questions = await fetchQuestionsOnline(
-              examType: 'post_utme',
-              institutionId: 'ui',
-              subject: 'aptitude',
-              year: year,
-            );
-          } catch (e2) {
-            debugPrint('⚠️ [PRE-DOWNLOAD] Fallback download failed: $e2');
-          }
+          debugPrint('⚠️ [PRE-DOWNLOAD] Failed to download free $subject $year: $e');
         }
 
         if (questions.isNotEmpty) {

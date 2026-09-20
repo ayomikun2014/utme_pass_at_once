@@ -6,7 +6,7 @@ import 'package:utme_pass_at_once/routes.dart';
 import '../../../main.dart';
 import '../../../core/services/notification_service.dart';
 
-/// A gate screen that shows the [SplashScreen] animation while concurrently 
+/// A gate screen that shows the [SplashScreen] animation while concurrently
 /// checking for an existing user session.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -29,10 +29,10 @@ class _AuthGateState extends State<AuthGate> {
   /// Perform the initial authentication check.
   Future<void> _checkAuth() async {
     final authProvider = context.read<AuthProvider>();
-    
+
     // Attempt auto-login (checks Hive cache + Firebase validity)
     _isLoggedIn = await authProvider.tryAutoLogin();
-    
+
     _isAuthChecked = true;
     _maybeNavigate();
   }
@@ -53,7 +53,7 @@ class _AuthGateState extends State<AuthGate> {
       if (_isLoggedIn) {
         // User is logged in, send to the main app interface
         Navigator.pushReplacementNamed(context, AppRoutes.mainShell);
-        
+
         // Handle pending deep link or notification (Cold Start Routing Queue)
         if (NotificationService.pendingRoute != null) {
           final pendingRouteData = NotificationService.pendingRoute!;
@@ -61,8 +61,9 @@ class _AuthGateState extends State<AuthGate> {
 
           WidgetsBinding.instance.addPostFrameCallback((_) {
             rootNavigatorKey.currentState?.pushNamed(
-                pendingRouteData['route'], 
-                arguments: pendingRouteData);
+              pendingRouteData['route'],
+              arguments: pendingRouteData,
+            );
           });
         }
       } else {
@@ -75,8 +76,6 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     // Show the splash screen while the gate is processing
-    return SplashScreen(
-      onComplete: _onAnimationComplete,
-    );
+    return SplashScreen(onComplete: _onAnimationComplete);
   }
 }

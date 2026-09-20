@@ -34,9 +34,7 @@ class _ProfileState extends State<Profile> {
                 return const CustomScrollView(
                   slivers: [
                     CustomAppBar(title: 'Edit Profile', isLeading: true),
-                    SliverFillRemaining(
-                      child: Center(child: CustomLoader()),
-                    )
+                    SliverFillRemaining(child: Center(child: CustomLoader())),
                   ],
                 );
               }
@@ -53,9 +51,9 @@ class _ProfileState extends State<Profile> {
               return CustomScrollView(
                 slivers: [
                   const CustomAppBar(
-                      title: 'Edit Profile',
-                      subtitle: 'Update your personal details and contact info.',
-                      isLeading: true
+                    title: 'Edit Profile',
+                    subtitle: 'Update your personal details and contact info.',
+                    isLeading: true,
                   ),
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -87,11 +85,36 @@ class _ProfileState extends State<Profile> {
                               },
                             ),
                           ),
-                          _buildInfoItem(context, Icons.person_pin_rounded, 'Full Name', name),
-                          _buildInfoItem(context, Icons.person_rounded, 'Gender', gender),
-                          _buildInfoItem(context, Icons.cake_rounded, 'Date of Birth', dob),
-                          _buildInfoItem(context, Icons.star_rounded, 'Hobbies', hobbies),
-                          _buildInfoItem(context, Icons.trending_up_rounded, 'My Interests', interests),
+                          _buildInfoItem(
+                            context,
+                            Icons.person_pin_rounded,
+                            'Full Name',
+                            name,
+                          ),
+                          _buildInfoItem(
+                            context,
+                            Icons.person_rounded,
+                            'Gender',
+                            gender,
+                          ),
+                          _buildInfoItem(
+                            context,
+                            Icons.cake_rounded,
+                            'Date of Birth',
+                            dob,
+                          ),
+                          _buildInfoItem(
+                            context,
+                            Icons.star_rounded,
+                            'Hobbies',
+                            hobbies,
+                          ),
+                          _buildInfoItem(
+                            context,
+                            Icons.trending_up_rounded,
+                            'My Interests',
+                            interests,
+                          ),
                           const SizedBox(height: 32),
 
                           // --- CONTACT INFORMATION ---
@@ -108,8 +131,18 @@ class _ProfileState extends State<Profile> {
                               },
                             ),
                           ),
-                          _buildInfoItem(context, Icons.mail_rounded, 'Email', email),
-                          _buildInfoItem(context, Icons.phone_rounded, 'Mobile Phone', phone),
+                          _buildInfoItem(
+                            context,
+                            Icons.mail_rounded,
+                            'Email',
+                            email,
+                          ),
+                          _buildInfoItem(
+                            context,
+                            Icons.phone_rounded,
+                            'Mobile Phone',
+                            phone,
+                          ),
                           const SizedBox(height: 32),
 
                           // --- SCHOOLING INFORMATION ---
@@ -123,7 +156,12 @@ class _ProfileState extends State<Profile> {
                               labels: {'schoolStatus': 'School Status'},
                             ),
                           ),
-                          _buildInfoItem(context, Icons.school_rounded, 'School Status', schoolStatus),
+                          _buildInfoItem(
+                            context,
+                            Icons.school_rounded,
+                            'School Status',
+                            schoolStatus,
+                          ),
                           const SizedBox(height: 40),
                         ],
                       ),
@@ -138,13 +176,20 @@ class _ProfileState extends State<Profile> {
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, {required String title, required VoidCallback onEdit}) {
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required String title,
+    required VoidCallback onEdit,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           InkWell(
             onTap: onEdit,
             borderRadius: BorderRadius.circular(20),
@@ -160,7 +205,11 @@ class _ProfileState extends State<Profile> {
                   SizedBox(width: 6),
                   Text(
                     'Edit',
-                    style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -171,9 +220,15 @@ class _ProfileState extends State<Profile> {
     );
   }
 
-  Widget _buildInfoItem(BuildContext context, IconData icon, String label, String value) {
+  Widget _buildInfoItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     final theme = Theme.of(context);
-    final bool isMissingData = value == '--' || value == 'Department of --' || value.isEmpty;
+    final bool isMissingData =
+        value == '--' || value == 'Department of --' || value.isEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16.0),
@@ -206,7 +261,9 @@ class _ProfileState extends State<Profile> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    fontStyle: isMissingData ? FontStyle.italic : FontStyle.normal,
+                    fontStyle: isMissingData
+                        ? FontStyle.italic
+                        : FontStyle.normal,
                     color: isMissingData
                         ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
                         : theme.colorScheme.onSurface,
@@ -221,11 +278,11 @@ class _ProfileState extends State<Profile> {
   }
 
   void _showEditBottomSheet(
-      BuildContext context,
-      String sectionTitle,
-      Map<String, String> fields, {
-        Map<String, String>? labels,
-      }) {
+    BuildContext context,
+    String sectionTitle,
+    Map<String, String> fields, {
+    Map<String, String>? labels,
+  }) {
     final authProvider = context.read<AuthProvider>();
 
     showModalBottomSheet(
@@ -273,7 +330,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   void initState() {
     super.initState();
     for (final entry in widget.fields.entries) {
-      final value = (entry.value == '--' || entry.value == 'Department of --') ? '' : entry.value;
+      final value = (entry.value == '--' || entry.value == 'Department of --')
+          ? ''
+          : entry.value;
       _controllers[entry.key] = TextEditingController(text: value);
       if (entry.key == 'gender') _selectedGender = value.isEmpty ? null : value;
     }
@@ -298,8 +357,13 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(
-        24, 24, 24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
+        24,
+        24,
+        24,
+        // Clear of the keyboard when it is up, of the gesture bar when it is not.
+        MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).viewPadding.bottom +
+            24,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -334,12 +398,18 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                     controller: _controllers[key],
                     readOnly: true,
                     enabled: false,
-                    style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                    style: TextStyle(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ),
                     decoration: InputDecoration(
                       labelText: displayLabel,
                       prefixIcon: const Icon(Icons.mail_rounded),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      fillColor: isDark
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.grey.shade100,
                       filled: true,
                     ),
                   ),
@@ -351,13 +421,20 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: DropdownButtonFormField<String>(
-                    initialValue: ['Male', 'Female', 'Other'].contains(_selectedGender) ? _selectedGender : null,
+                    initialValue:
+                        ['Male', 'Female', 'Other'].contains(_selectedGender)
+                        ? _selectedGender
+                        : null,
                     decoration: InputDecoration(
                       labelText: displayLabel,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       prefixIcon: const Icon(Icons.person_rounded),
                     ),
-                    items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                    items: ['Male', 'Female', 'Other']
+                        .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                        .toList(),
                     onChanged: (val) => setState(() => _selectedGender = val),
                   ),
                 );
@@ -373,18 +450,23 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                     decoration: InputDecoration(
                       labelText: displayLabel,
                       prefixIcon: const Icon(Icons.calendar_today_rounded),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     onTap: () async {
                       DateTime? pickedDate = await showDatePicker(
                         context: context,
-                        initialDate: DateTime.now().subtract(const Duration(days: 6570)), // Default ~18 years ago
+                        initialDate: DateTime.now().subtract(
+                          const Duration(days: 6570),
+                        ), // Default ~18 years ago
                         firstDate: DateTime(1950),
                         lastDate: DateTime.now(),
                       );
                       if (pickedDate != null) {
                         setState(() {
-                          _controllers[key]!.text = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+                          _controllers[key]!.text =
+                              "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
                         });
                       }
                     },
@@ -407,7 +489,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                       labelText: displayLabel,
                       hintText: 'e.g 08012345678',
                       prefixIcon: const Icon(Icons.phone_rounded),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
                 );
@@ -425,12 +509,17 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   controller: _controllers[key],
                   maxLines: (key == 'hobbies' || key == 'interests') ? 2 : 1,
                   inputFormatters: [
-                    if (maxLength != null) LengthLimitingTextInputFormatter(maxLength),
+                    if (maxLength != null)
+                      LengthLimitingTextInputFormatter(maxLength),
                   ],
                   decoration: InputDecoration(
                     labelText: displayLabel,
-                    prefixIcon: key == 'displayName' ? const Icon(Icons.person_pin_rounded) : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: key == 'displayName'
+                        ? const Icon(Icons.person_pin_rounded)
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               );
@@ -446,60 +535,79 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
               onPressed: _isSaving
                   ? null
                   : () async {
-                if (_controllers.containsKey('phone')) {
-                  final phoneText = _controllers['phone']!.text.trim();
-                  if (phoneText.isNotEmpty && phoneText.length != 11) {
-                    CustomToast.show(context, 'Phone number must be exactly 11 digits.', isError: true);
-                    return;
-                  }
-                }
+                      if (_controllers.containsKey('phone')) {
+                        final phoneText = _controllers['phone']!.text.trim();
+                        if (phoneText.isNotEmpty && phoneText.length != 11) {
+                          CustomToast.show(
+                            context,
+                            'Phone number must be exactly 11 digits.',
+                            isError: true,
+                          );
+                          return;
+                        }
+                      }
 
-                setState(() => _isSaving = true);
+                      setState(() => _isSaving = true);
 
-                final updates = <String, dynamic>{};
-                for (final entry in _controllers.entries) {
-                  if (entry.key == 'email') continue;
+                      final updates = <String, dynamic>{};
+                      for (final entry in _controllers.entries) {
+                        if (entry.key == 'email') continue;
 
-                  if (entry.key == 'gender') {
-                    updates['gender'] = _selectedGender ?? '--';
-                  } else {
-                    final newVal = entry.value.text.trim();
-                    if (entry.key == 'displayName') {
-                      if (newVal.isEmpty) {
-                        CustomToast.show(context, 'Full Name cannot be empty.', isError: true);
-                        setState(() => _isSaving = false);
+                        if (entry.key == 'gender') {
+                          updates['gender'] = _selectedGender ?? '--';
+                        } else {
+                          final newVal = entry.value.text.trim();
+                          if (entry.key == 'displayName') {
+                            if (newVal.isEmpty) {
+                              CustomToast.show(
+                                context,
+                                'Full Name cannot be empty.',
+                                isError: true,
+                              );
+                              setState(() => _isSaving = false);
+                              return;
+                            }
+                            updates[entry.key] = newVal;
+                          } else if (entry.key == 'schoolStatus') {
+                            updates[entry.key] = newVal.isEmpty
+                                ? 'Department of --'
+                                : newVal;
+                          } else {
+                            updates[entry.key] = newVal.isEmpty ? '--' : newVal;
+                          }
+                        }
+                      }
+
+                      if (updates.isEmpty) {
+                        Navigator.pop(context);
                         return;
                       }
-                      updates[entry.key] = newVal;
-                    } else if (entry.key == 'schoolStatus') {
-                      updates[entry.key] = newVal.isEmpty ? 'Department of --' : newVal;
-                    } else {
-                      updates[entry.key] = newVal.isEmpty ? '--' : newVal;
-                    }
-                  }
-                }
 
-                if (updates.isEmpty) {
-                  Navigator.pop(context);
-                  return;
-                }
+                      final navigator = Navigator.of(context);
+                      final errorMsg = widget.authProvider.errorMessage;
 
-                final navigator = Navigator.of(context);
-                final errorMsg = widget.authProvider.errorMessage;
+                      final success = await widget.authProvider.updateProfile(
+                        updates,
+                      );
 
-                final success = await widget.authProvider.updateProfile(updates);
+                      if (!mounted) return;
+                      navigator.pop();
 
-                if (!mounted) return;
-                navigator.pop();
+                      if (!widget.parentContext.mounted) return;
 
-                if (!widget.parentContext.mounted) return;
-
-                if (success) {
-                  CustomToast.show(widget.parentContext, 'Changes saved successfully!');
-                } else {
-                  CustomToast.show(widget.parentContext, errorMsg, isError: true);
-                }
-              },
+                      if (success) {
+                        CustomToast.show(
+                          widget.parentContext,
+                          'Changes saved successfully!',
+                        );
+                      } else {
+                        CustomToast.show(
+                          widget.parentContext,
+                          errorMsg,
+                          isError: true,
+                        );
+                      }
+                    },
             ),
             const SizedBox(height: 12),
             CustomBtn(

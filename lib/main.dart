@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_app_badge_control/flutter_app_badge_control.dart';
@@ -31,8 +33,10 @@ import 'features/user/providers/study_notes_provider.dart';
 import 'features/user/providers/manual_payment_provider.dart';
 import 'features/user/providers/video_provider.dart';
 import 'features/user/providers/announcement_provider.dart';
+import 'features/user/providers/admission_finder_provider.dart';
 
 import 'routes.dart';
+import 'core/screens/admin_gate_listener.dart';
 
 // ================= GLOBAL KEYS =================
 final GlobalKey<NavigatorState> rootNavigatorKey =
@@ -51,6 +55,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 // ================= MAIN =================
 void main() {
+  // A shipped phone's log is not the place for the app's running commentary:
+  // uids, emails and internal errors all went to logcat in release builds.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -83,6 +93,9 @@ Future<void> _initApp() async {
     // Enable Screenshot & Screen Recording Prevention + Background blur
     await ScreenProtector.preventScreenshotOn();
     await ScreenProtector.protectDataLeakageWithBlur();
+
+    // Enable edge-to-edge UI drawing for modern system navigation padding
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     runApp(const UtmePassApp());
   } catch (e) {
@@ -119,6 +132,7 @@ class UtmePassApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ManualPaymentProvider()),
         ChangeNotifierProvider(create: (_) => VideoProvider()),
         ChangeNotifierProvider(create: (_) => AnnouncementProvider()),
+        ChangeNotifierProvider(create: (_) => AdmissionFinderProvider()),
       ],
       child: Consumer<AppThemeProvider>(
         builder: (context, theme, _) {
@@ -142,6 +156,26 @@ class UtmePassApp extends StatelessWidget {
             ),
             routes: AppRoutes.staticRoutes,
             onUnknownRoute: AppRoutes.unknownRoute,
+            builder: (context, child) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              final overlayStyle = SystemUiOverlayStyle(
+                systemNavigationBarColor: Colors.transparent,
+                systemNavigationBarDividerColor: Colors.transparent,
+                systemNavigationBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+              );
+
+              // AdminGateListener wraps the entire navigator tree so that
+              // suspension / maintenance / force-update overlays appear
+              // immediately on any screen the user happens to be on.
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: overlayStyle,
+                child: AdminGateListener(child: child ?? const SizedBox.shrink()),
+              );
+            },
           );
         },
       ),

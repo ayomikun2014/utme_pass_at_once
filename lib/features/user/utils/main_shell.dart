@@ -7,7 +7,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-
 import 'package:flutter/rendering.dart';
 
 import 'package:flutter/services.dart';
@@ -29,6 +28,8 @@ import '../providers/ai_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 
 import '../../../core/services/notification_service.dart';
+
+import '../../../routes.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -95,6 +96,8 @@ class _MainShellState extends State<MainShell> {
   DateTime? _lastBackPressTime;
 
   bool _isNavVisible = true;
+  bool _showTooltip = true;
+  Timer? _tooltipTimer;
 
   StreamSubscription<QuerySnapshot>? _notifSubscription;
 
@@ -109,6 +112,8 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runAppLaunchChecks();
     });
+
+    _startTooltipCycle();
   }
 
   @override
@@ -116,8 +121,36 @@ class _MainShellState extends State<MainShell> {
     _pageController.dispose();
 
     _notifSubscription?.cancel();
+    _tooltipTimer?.cancel();
 
     super.dispose();
+  }
+
+  void _startTooltipCycle() {
+    // Hide initially after 8 seconds
+    Timer(const Duration(seconds: 8), () {
+      if (mounted) {
+        setState(() {
+          _showTooltip = false;
+        });
+      }
+    });
+
+    // Show for 8 seconds every 45 seconds
+    _tooltipTimer = Timer.periodic(const Duration(seconds: 45), (timer) {
+      if (mounted) {
+        setState(() {
+          _showTooltip = true;
+        });
+      }
+      Timer(const Duration(seconds: 8), () {
+        if (mounted) {
+          setState(() {
+            _showTooltip = false;
+          });
+        }
+      });
+    });
   }
 
   Future<void> _runAppLaunchChecks() async {
@@ -218,6 +251,7 @@ class _MainShellState extends State<MainShell> {
                   await simProvider.downloadActivationData(
                     examType: exam,
                     institutionId: baseInstitutionId,
+                    subjects: user.getSubjectsForCenter(exam, center),
                     sectionId: section?['id'],
                   );
                 }
@@ -327,23 +361,33 @@ class _MainShellState extends State<MainShell> {
     }
   }
 
+  void _dismissTutorialShowcase() {
+    final activeContext = TutorialService.instance.showcaseContext;
+    if (activeContext != null && activeContext.mounted) {
+      try {
+        ShowCaseWidget.of(activeContext).dismiss();
+      } catch (_) {}
+    }
+  }
+
   void _switchTo(int index) {
+    _dismissTutorialShowcase();
     setState(() {
       _currentIndex = index;
     });
     if (_pageController.hasClients) {
-      _pageController.animateToPage(
-        index,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOutCubic,
-      );
+      _pageController.jumpToPage(index);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final bottomPad = isKeyboardOpen ? -90.0 : 16.0;
+    // Extra bottom offset so the nav clears on-screen gesture bars (back/home buttons)
+    final systemNavPad = MediaQuery.of(context).padding.bottom;
+    final bottomPad = isKeyboardOpen
+        ? -100.0
+        : (systemNavPad > 0 ? systemNavPad + 8.0 : 28.0);
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -386,16 +430,13 @@ class _MainShellState extends State<MainShell> {
 
             if (safeIndex != 0) {
               // If we are in any other tab than home, switch back to home
+              _dismissTutorialShowcase();
               setState(() {
                 _currentIndex = 0;
                 _isNavVisible = true;
               });
               if (_pageController.hasClients) {
-                _pageController.animateToPage(
-                  0,
-                  duration: const Duration(milliseconds: 350),
-                  curve: Curves.easeInOutCubic,
-                );
+                _pageController.jumpToPage(0);
               }
               return;
             }
@@ -418,7 +459,129 @@ class _MainShellState extends State<MainShell> {
             }
           },
           child: Scaffold(
-            floatingActionButton: null,
+            floatingActionButton: Padding(
+              padding: const EdgeInsets.only(
+                bottom: 90.0,
+              ), // Elevate above bottom bar
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedScale(
+                    scale: _showTooltip ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.elasticOut,
+                    child: AnimatedOpacity(
+                      opacity: _showTooltip ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: GestureDetector(
+                        onTap: _showTooltip
+                            ? () => MainShell.openAIChat(context)
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [AppColors.primary, Colors.purpleAccent],
+                            ),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(16),
+                              topRight: Radius.circular(16),
+                              bottomLeft: Radius.circular(16),
+                              bottomRight: Radius.circular(2),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lightbulb_rounded,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Stuck activating? Tap here! 💡',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => MainShell.openAIChat(context),
+                    child: Container(
+                      width: 54,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppColors.primary,
+                            Color(0xFF14B8A6), // Lighter brand teal
+                            Colors.purpleAccent,
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.35),
+                            blurRadius: 12,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 4),
+                          ),
+                          BoxShadow(
+                            color: Colors.purpleAccent.withValues(alpha: 0.25),
+                            blurRadius: 12,
+                            spreadRadius: 1,
+                            offset: const Offset(0, -2),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Subtle inner glowing border/ring
+                          Container(
+                            margin: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          Image.asset(
+                            'assets/images/app_logo.webp',
+                            width: 30,
+                            height: 30,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             body: Stack(
               children: [
                 NotificationListener<UserScrollNotification>(
@@ -448,79 +611,65 @@ class _MainShellState extends State<MainShell> {
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 300),
                   curve: Curves.easeInOut,
-                  left: 20,
-                  right: 20,
-                  bottom: (_isNavVisible && !isKeyboardOpen) ? bottomPad : -90,
+                  left: 16,
+                  right: 16,
+                  bottom: (_isNavVisible && !isKeyboardOpen) ? bottomPad : -100,
 
                   child: Container(
-                    height: 65,
+                    height: 70,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
 
                     decoration: BoxDecoration(
                       color: isDark
-                          ? AppColors.surfaceDark.withValues(alpha: 0.95)
-                          : AppColors.backgroundLight.withValues(alpha: 0.95),
+                          ? AppColors.surfaceDark.withValues(alpha: 0.97)
+                          : AppColors.backgroundLight.withValues(alpha: 0.97),
 
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(32),
 
                       border: Border.all(
                         color: isDark
-                            ? AppColors.dividerDark
-                            : AppColors.surfaceLight,
+                            ? AppColors.dividerDark.withValues(alpha: 0.6)
+                            : AppColors.surfaceLight.withValues(alpha: 0.8),
+                        width: 1.0,
                       ),
 
                       boxShadow: [
+                        BoxShadow(
+                          color: isDark
+                              ? Colors.black.withValues(alpha: 0.4)
+                              : AppColors.dividerLight.withValues(alpha: 0.35),
+                          blurRadius: 20,
+                          spreadRadius: 0,
+                          offset: const Offset(0, 6),
+                        ),
                         if (!isDark)
                           BoxShadow(
-                            color: AppColors.dividerLight.withValues(
-                              alpha: 0.5,
-                            ),
-
-                            blurRadius: 10,
-
-                            offset: const Offset(0, 8),
+                            color: Colors.white.withValues(alpha: 0.9),
+                            blurRadius: 0,
+                            spreadRadius: 0,
+                            offset: Offset.zero,
                           ),
                       ],
                     ),
 
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(28),
 
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
 
                         children: [
-                          _navItem(
-                            0,
+                          _navItem(0, Icons.home_rounded, 'Home'),
 
-                            Icons.home_rounded,
+                          _navItem(1, Icons.book_rounded, 'Study'),
 
-                            'Home',
-                          ),
-
-                          _navItem(
-                            1,
-
-                            Icons.book_rounded,
-
-                            'Study',
-                          ),
-
-                          _navItem(
-                            2,
-
-                            Icons.video_library_rounded,
-
-                            'Tutorials',
-                          ),
+                          _navItem(2, Icons.video_library_rounded, 'Tutorials'),
 
                           if (showEClassroom)
-                            _navItem(
-                              3,
-
-                              Icons.school_rounded,
-
-                              'eClassroom',
-                            ),
+                            _navItem(3, Icons.school_rounded, 'eClassroom'),
 
                           _navItem(
                             showEClassroom ? 4 : 3,
@@ -542,13 +691,7 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _navItem(
-    int index,
-
-    IconData activeIcon,
-
-    String label,
-  ) {
+  Widget _navItem(int index, IconData activeIcon, String label) {
     final theme = Theme.of(context);
 
     final isActive = _currentIndex == index;
@@ -569,13 +712,10 @@ class _MainShellState extends State<MainShell> {
           return;
         }
 
+        _dismissTutorialShowcase();
         setState(() => _currentIndex = index);
         if (_pageController.hasClients) {
-          _pageController.animateToPage(
-            index,
-            duration: const Duration(milliseconds: 350),
-            curve: Curves.easeInOutCubic,
-          );
+          _pageController.jumpToPage(index);
         }
       },
 
@@ -584,7 +724,14 @@ class _MainShellState extends State<MainShell> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
 
-        width: 60,
+        // Pill background for active item
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive
+              ? activeColor.withValues(alpha: isDark ? 0.18 : 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
 
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -592,18 +739,6 @@ class _MainShellState extends State<MainShell> {
           mainAxisAlignment: MainAxisAlignment.center,
 
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              width: isActive ? 20 : 0,
-              height: 2,
-              decoration: BoxDecoration(
-                color: currentColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-
-            const SizedBox(height: 4),
-
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               width: 60,
@@ -654,7 +789,7 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
 
-            const SizedBox(height: 2),
+            const SizedBox(height: 3),
 
             Text(
               label,
@@ -680,36 +815,44 @@ class _MainShellState extends State<MainShell> {
     if (label == 'Home') {
       return tutorial.buildShowcase(
         key: tutorial.navHomeKey,
-        title: 'All Caught Up! 🏁',
+        icon: Icons.home_rounded,
+        accent: AppColors.primary,
+        title: "That's the tour",
         description:
-            'You are ready to crush your exams! Tap "Done" to finish the tour.',
+            'Home is always one tap away. You can replay this tour any time from Settings.',
         context: context,
         child: navWidget,
       );
     } else if (label == 'Study') {
       return tutorial.buildShowcase(
         key: tutorial.navStudyKey,
-        title: 'Study Hub 📚',
+        icon: Icons.menu_book_rounded,
+        accent: const Color(0xFF0D9488),
+        title: 'Study tab',
         description:
-            "Let's check out the Study tab for detailed study materials and simulators. Tapping next will take you there!",
+            'Past questions, notes and the simulator live here. Tap Next and we will open it together.',
         context: context,
         child: navWidget,
       );
     } else if (label == 'Tutorials') {
       return tutorial.buildShowcase(
         key: tutorial.navTutorialsKey,
-        title: 'Video Tutorials 🎬',
+        icon: Icons.play_circle_fill_rounded,
+        accent: const Color(0xFF7C3AED),
+        title: 'Video lessons',
         description:
-            'Need visual explanations? Tapping next will open the Video Tutorials tab!',
+            'Prefer to watch a topic explained? Tap Next to see the video tutorials.',
         context: context,
         child: navWidget,
       );
     } else if (label == 'eClassroom') {
       return tutorial.buildShowcase(
         key: tutorial.navEClassroomKey,
-        title: 'eClassroom Portal 🏫',
+        icon: Icons.groups_rounded,
+        accent: const Color(0xFF0891B2),
+        title: 'eClassroom',
         description:
-            'If you belong to an affiliated center, tap next to visit your interactive classroom center.',
+            'Your centre posts tests and assignments here. Tap Next to take a look.',
         context: context,
         child: navWidget,
       );
@@ -720,473 +863,442 @@ class _MainShellState extends State<MainShell> {
 
   void _showChatSheet(BuildContext context) {
     debugPrint('_MainShellState: _showChatSheet called');
-
     final theme = Theme.of(context);
-
     final isDark = theme.brightness == Brightness.dark;
+    final controller = TextEditingController();
 
     showModalBottomSheet(
       context: context,
-
       isScrollControlled: true,
-
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-
       builder: (context) {
-        final aiProvider = context.watch<AIProvider>();
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final aiProvider = context.watch<AIProvider>();
+            final isUserPremium =
+                context.read<AuthProvider>().currentUser?.isPremium ?? false;
 
-        final isUserPremium =
-            context.read<AuthProvider>().currentUser?.isPremium ?? false;
-
-        final TextEditingController controller = TextEditingController();
-
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.85,
-
-          decoration: BoxDecoration(
-            color: isDark
-                ? AppColors.surfaceDark
-                : theme.scaffoldBackgroundColor,
-
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-
-                blurRadius: 20,
-
-                offset: const Offset(0, -5),
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.85,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppColors.surfaceDark
+                    : theme.scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 20,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
               ),
-            ],
-          ),
-
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-
-                  children: [
-                    Row(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-
-                            shape: BoxShape.circle,
-                          ),
-
-                          child: Image.asset(
-                            'assets/images/app_logo.webp',
-
-                            width: 20,
-
-                            height: 20,
-                          ),
-                        ),
-
-                        const SizedBox(width: 12),
-
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-
+                        Row(
                           children: [
-                            Text(
-                              'Cognita AI',
-
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-
-                                fontSize: 18,
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.15,
+                                ),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Image.asset(
+                                'assets/images/app_logo.webp',
+                                width: 20,
+                                height: 20,
                               ),
                             ),
-
-                            Text(
-                              'Always here to help you understand',
-
-                              style: TextStyle(
-                                fontSize: 12,
-
-                                color: Colors.grey,
+                            const SizedBox(width: 12),
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cognita AI',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 18,
+                                  ),
+                                ),
+                                Text(
+                                  'Always here to help you understand',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            if (aiProvider.messages.isNotEmpty)
+                              IconButton(
+                                tooltip: 'Start a new chat',
+                                icon: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_comment_outlined,
+                                    size: 18,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  aiProvider.clearChat();
+                                  setSheetState(() {});
+                                },
                               ),
+                            IconButton(
+                              icon: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 20,
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
                             ),
                           ],
                         ),
                       ],
                     ),
-
-                    IconButton(
-                      icon: Container(
-                        padding: const EdgeInsets.all(6),
-
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.1),
-
-                          shape: BoxShape.circle,
-                        ),
-
-                        child: const Icon(Icons.close_rounded, size: 20),
-                      ),
-
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-
-              Divider(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
-
-                height: 1,
-              ),
-
-              Expanded(
-                child: aiProvider.messages.isEmpty
-                    ? Center(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-
+                  ),
+                  Divider(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
+                    height: 1,
+                  ),
+                  Expanded(
+                    child: aiProvider.messages.isEmpty
+                        ? _buildChatWelcome(context, theme)
+                        : ListView(
+                            reverse: true,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(32),
-
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.05,
+                              if (aiProvider.isLoading)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: 16.0,
+                                    left: 12,
                                   ),
-
-                                  shape: BoxShape.circle,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? AppColors.surfaceDark
+                                              : theme
+                                                    .colorScheme
+                                                    .surfaceContainerHighest,
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(20),
+                                            topRight: Radius.circular(20),
+                                            bottomRight: Radius.circular(20),
+                                            bottomLeft: Radius.circular(4),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const SizedBox(
+                                              width: 14,
+                                              height: 14,
+                                              child: CustomLoader(size: 14),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              "Cognita is thinking...",
+                                              style: TextStyle(
+                                                fontStyle: FontStyle.italic,
+                                                color: isDark
+                                                    ? Colors.white70
+                                                    : Colors.black54,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-
-                                child: Image.asset(
-                                  'assets/images/app_logo.webp',
-
-                                  width: 80,
-
-                                  height: 80,
-                                ),
-                              ),
-
-                              const SizedBox(height: 24),
-
-                              const Text(
-                                "Ask Me Anything!",
-
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w900,
-
-                                  fontSize: 22,
-                                ),
-                              ),
-
-                              const SizedBox(height: 10),
-
-                              Text(
-                                "I can explain difficult topics,\nsolve equations, or give study tips.",
-
-                                textAlign: TextAlign.center,
-
-                                style: TextStyle(
-                                  fontSize: 15,
-
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.5,
-                                  ),
-
-                                  height: 1.4,
-                                ),
-                              ),
-
-                              const SizedBox(height: 30),
-
-                              Wrap(
-                                spacing: 10,
-
-                                runSpacing: 10,
-
-                                alignment: WrapAlignment.center,
-
-                                children: [
-                                  _buildSuggestionChip(
-                                    "Explain Osmosis",
-
-                                    aiProvider,
-
-                                    isUserPremium,
-                                  ),
-
-                                  _buildSuggestionChip(
-                                    "Solve for x",
-
-                                    aiProvider,
-
-                                    isUserPremium,
-                                  ),
-
-                                  _buildSuggestionChip(
-                                    "Exam tips",
-
-                                    aiProvider,
-
-                                    isUserPremium,
-                                  ),
-                                ],
+                              ...aiProvider.messages.map(
+                                (msg) => _buildMessageBubble(msg, context),
                               ),
                             ],
                           ),
-                        ),
-                      )
-                    : ListView(
-                        reverse: true,
-
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-
-                          vertical: 20,
-                        ),
-
-                        children: [
-                          if (aiProvider.isLoading)
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                bottom: 16.0,
-
-                                left: 12,
-                              ),
-
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppColors.surfaceDark
-                                          : theme
-                                                .colorScheme
-                                                .surfaceContainerHighest,
-
-                                      borderRadius: const BorderRadius.only(
-                                        topLeft: Radius.circular(20),
-
-                                        topRight: Radius.circular(20),
-
-                                        bottomRight: Radius.circular(20),
-
-                                        bottomLeft: Radius.circular(4),
-                                      ),
-                                    ),
-
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-
-                                      children: [
-                                        const SizedBox(
-                                          width: 14,
-
-                                          height: 14,
-
-                                          child: CustomLoader(size: 14),
-                                        ),
-
-                                        const SizedBox(width: 12),
-
-                                        Text(
-                                          "Cognita is thinking...",
-
-                                          style: TextStyle(
-                                            fontStyle: FontStyle.italic,
-
-                                            color: isDark
-                                                ? Colors.white70
-                                                : Colors.black54,
-
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                          ...aiProvider.messages.map(
-                            (msg) => _buildMessageBubble(msg, context),
-                          ),
-                        ],
-                      ),
-              ),
-
-              Container(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-
-                  left: 16,
-
-                  right: 16,
-
-                  top: 12,
-                ),
-
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.surfaceDark
-                      : theme.scaffoldBackgroundColor,
-
-                  border: Border(
-                    top: BorderSide(
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.05,
-                      ),
-                    ),
                   ),
-
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-
-                      blurRadius: 10,
-
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-
-                  children: [
-                    Expanded(
-                      child: Container(
+                  Builder(
+                    builder: (context) {
+                      final media = MediaQuery.of(context);
+                      // With the keyboard up the bar rides on the keyboard;
+                      // with it down the bar clears the phone's gesture bar,
+                      // which otherwise sits over the send button.
+                      final bottomGap = media.viewInsets.bottom > 0
+                          ? media.viewInsets.bottom + 12
+                          : media.viewPadding.bottom + 16;
+                      return Container(
+                        padding: EdgeInsets.only(
+                          bottom: bottomGap,
+                          left: 16,
+                          right: 16,
+                          top: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? Colors.black26
-                              : theme.colorScheme.surfaceContainerHighest,
-
-                          borderRadius: BorderRadius.circular(24),
-
-                          border: Border.all(
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.05,
-                            ),
-                          ),
-                        ),
-
-                        child: TextField(
-                          controller: controller,
-
-                          minLines: 1,
-
-                          maxLines: 4,
-
-                          textCapitalization: TextCapitalization.sentences,
-
-                          style: const TextStyle(fontSize: 15),
-
-                          decoration: InputDecoration(
-                            hintText: "Message Cognita...",
-
-                            hintStyle: TextStyle(
+                              ? AppColors.surfaceDark
+                              : theme.scaffoldBackgroundColor,
+                          border: Border(
+                            top: BorderSide(
                               color: theme.colorScheme.onSurface.withValues(
-                                alpha: 0.4,
+                                alpha: 0.05,
                               ),
                             ),
-
-                            border: InputBorder.none,
-
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-
-                              vertical: 14,
-                            ),
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, -4),
+                            ),
+                          ],
                         ),
-                      ),
-                    ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.black26
+                                      : theme
+                                            .colorScheme
+                                            .surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.05),
+                                  ),
+                                ),
+                                child: TextField(
+                                  controller: controller,
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  textCapitalization:
+                                      TextCapitalization.sentences,
+                                  style: const TextStyle(fontSize: 15),
+                                  decoration: InputDecoration(
+                                    hintText: "Message Cognita...",
+                                    hintStyle: TextStyle(
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 20,
+                                      vertical: 14,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Container(
+                              height: 48,
+                              width: 48,
+                              margin: const EdgeInsets.only(bottom: 2),
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.send_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  final text = controller.text.trim();
+                                  if (text.isEmpty) return;
 
-                    const SizedBox(width: 10),
+                                  // Someone typing "faq" wants the help pages, not
+                                  // a conversation about them.
+                                  if (_isHelpRequest(text)) {
+                                    controller.clear();
+                                    _openHelpAndFaq(context);
+                                    return;
+                                  }
 
-                    Container(
-                      height: 48,
-
-                      width: 48,
-
-                      margin: const EdgeInsets.only(bottom: 2),
-
-                      decoration: const BoxDecoration(
-                        color: AppColors.primary,
-
-                        shape: BoxShape.circle,
-                      ),
-
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.send_rounded,
-
-                          color: Colors.white,
-
-                          size: 20,
+                                  aiProvider.sendMessage(
+                                    text,
+                                    isPremium: isUserPremium,
+                                  );
+                                  controller.clear();
+                                  setSheetState(() {});
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-
-                        onPressed: () {
-                          if (controller.text.trim().isNotEmpty) {
-                            aiProvider.sendMessage(
-                              controller.text.trim(),
-
-                              isPremium: isUserPremium,
-                            );
-
-                            controller.clear();
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                      );
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildSuggestionChip(
-    String text,
+  /// Close the sheet and open Settings > Help & FAQ.
+  void _openHelpAndFaq(BuildContext context) {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    navigator.pop();
+    navigator.pushNamed(AppRoutes.help);
+  }
 
-    AIProvider aiProvider,
+  /// Typed words that mean "show me the help pages".
+  bool _isHelpRequest(String text) {
+    final asked = text
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z ]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    const asks = {
+      'faq',
+      'faqs',
+      'help',
+      'help me',
+      'support',
+      'guide',
+      'guidelines',
+      'help and faq',
+      'help faq',
+      'how to use the app',
+      'how to use app',
+    };
+    return asks.contains(asked);
+  }
 
-    bool isUserPremium,
-  ) {
-    return ActionChip(
-      label: Text(
-        text,
+  /// What Cognita shows before the first question of a conversation.
+  Widget _buildChatWelcome(BuildContext context, ThemeData theme) {
+    final onSurface = theme.colorScheme.onSurface;
 
-        style: const TextStyle(
-          fontSize: 13,
-
-          fontWeight: FontWeight.w600,
-
-          color: AppColors.primary,
-        ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.05),
+              shape: BoxShape.circle,
+            ),
+            child: Image.asset(
+              'assets/images/app_logo.webp',
+              width: 50,
+              height: 50,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            "Ask me anything you are studying",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            "Maths, physics, chemistry, English \u2014 type a question, or paste "
+            "one you are stuck on, and I will work through it step by step.",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.45,
+              color: onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+          const SizedBox(height: 22),
+          // Payment, activation and device lock are answered in one place, so
+          // this sends readers there instead of repeating them here.
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => _openHelpAndFaq(context),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.help_outline_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Question about the app itself?",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          "Payment, activation codes and device lock are "
+                          "answered in Help & FAQ. Tap here, or type faq, to "
+                          "open it.",
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            height: 1.35,
+                            color: onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
-
-      backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-
-      side: BorderSide(color: AppColors.primary.withValues(alpha: 0.2)),
-
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-
-      onPressed: () {
-        aiProvider.sendMessage(text, isPremium: isUserPremium);
-      },
     );
   }
 
@@ -1327,6 +1439,30 @@ class _MainShellState extends State<MainShell> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                            if (!msg.isMe &&
+                                AIProvider.localFaqs.values.contains(
+                                  msg.text,
+                                )) ...[
+                              const SizedBox(width: 12),
+                              Icon(
+                                Icons.offline_pin_rounded,
+                                size: 12,
+                                color: isDark
+                                    ? Colors.greenAccent
+                                    : Colors.green.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                "Saved Offline",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.greenAccent
+                                      : Colors.green.shade600,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

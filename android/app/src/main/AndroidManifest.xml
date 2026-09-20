@@ -12,24 +12,31 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
 
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
-
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />  <!-- If needed -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- ✅ Full-screen intent permission for background notifications -->
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!--
+      Not declared, because nothing in the app uses them:
+        RECORD_AUDIO          reading a question aloud is text-to-speech, output only
+        SCHEDULE_EXACT_ALARM  no notification is scheduled on the device; pushes come from FCM
+        USE_FULL_SCREEN_INTENT  no notification opens full screen
+        FOREGROUND_SERVICE    no foreground service
+        RECEIVE_BOOT_COMPLETED  nothing to restore at boot
+      The middle three also need a Play policy declaration, so asking for them
+      without using them is a review problem as well as an overreach. Add the
+      matching one back with its receiver if reminders are ever scheduled.
+    -->
 
     <application
         android:label="Pass At Once CBT"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:hardwareAccelerated="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        tools:replace="android:allowBackup"
         >
 
         <!-- FCM default channel -->
@@ -61,16 +68,10 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- flutter_local_notifications -->
-        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </receiver>
+        <!--
+          flutter_local_notifications' scheduling receivers are left out on
+          purpose: notifications are shown as they arrive, never scheduled.
+        -->
 
     </application>
 

@@ -14,10 +14,17 @@ class SliverHomeCard extends StatefulWidget {
 
 // Added SingleTickerProviderStateMixin for the AnimationController
 class _SliverHomeCardState extends State<SliverHomeCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   int _currentIndex = 0;
   Timer? _timer;
   late AnimationController _bubbleController;
+
+  /// Drives the pulse on the unlock button.
+  ///
+  /// The button sat in teal on a teal card and readers were walking past it.
+  /// A slow breath is enough to catch the eye without turning the card into a
+  /// billboard; it only runs while there is something to unlock.
+  late AnimationController _pulseController;
 
   final List<String> _slidingContent = [
     'assets/images/slidingcontent01.webp',
@@ -41,12 +48,18 @@ class _SliverHomeCardState extends State<SliverHomeCard>
       vsync: this,
       duration: const Duration(seconds: 8),
     )..repeat();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _timer?.cancel();
     _bubbleController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -54,7 +67,7 @@ class _SliverHomeCardState extends State<SliverHomeCard>
   Widget build(BuildContext context) {
     return SliverToBoxAdapter(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 0.0),
         child: Container(
           height: 200,
           decoration: BoxDecoration(
@@ -150,25 +163,25 @@ class _SliverHomeCardState extends State<SliverHomeCard>
                     duration: const Duration(milliseconds: 600),
                     transitionBuilder:
                         (Widget child, Animation<double> animation) {
-                      final inAnimation = Tween<Offset>(
-                        begin: const Offset(1.0, 0.0),
-                        end: Offset.zero,
-                      ).animate(animation);
-                      final outAnimation = Tween<Offset>(
-                        begin: const Offset(-1.0, 0.0),
-                        end: Offset.zero,
-                      ).animate(animation);
+                          final inAnimation = Tween<Offset>(
+                            begin: const Offset(1.0, 0.0),
+                            end: Offset.zero,
+                          ).animate(animation);
+                          final outAnimation = Tween<Offset>(
+                            begin: const Offset(-1.0, 0.0),
+                            end: Offset.zero,
+                          ).animate(animation);
 
-                      return SlideTransition(
-                        position: child.key == ValueKey<int>(_currentIndex)
-                            ? inAnimation
-                            : outAnimation,
-                        child: FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        ),
-                      );
-                    },
+                          return SlideTransition(
+                            position: child.key == ValueKey<int>(_currentIndex)
+                                ? inAnimation
+                                : outAnimation,
+                            child: FadeTransition(
+                              opacity: animation,
+                              child: child,
+                            ),
+                          );
+                        },
                     child: Image.asset(
                       _slidingContent[_currentIndex],
                       key: ValueKey<int>(_currentIndex),
@@ -181,12 +194,13 @@ class _SliverHomeCardState extends State<SliverHomeCard>
 
                 // Foreground Content
                 Padding(
-                  padding: const EdgeInsets.all(20.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0,),
                   child: Consumer<AuthProvider>(
                     builder: (context, auth, child) {
                       final user = auth.currentUser;
                       final isPremium = user?.isPremium ?? false;
-                      final hasUnlockedAny = user?.examSelections.isNotEmpty ?? false;
+                      final hasUnlockedAny =
+                          user?.examSelections.isNotEmpty ?? false;
                       final isActuallyPremium = isPremium || hasUnlockedAny;
 
                       return Column(
@@ -200,16 +214,29 @@ class _SliverHomeCardState extends State<SliverHomeCard>
                                     top: 0,
                                     right: 0,
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.2),
+                                        color: Colors.white.withValues(
+                                          alpha: 0.2,
+                                        ),
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                        ),
                                       ),
                                       child: const Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(Icons.verified_rounded, color: Colors.white, size: 12),
+                                          Icon(
+                                            Icons.verified_rounded,
+                                            color: Colors.white,
+                                            size: 12,
+                                          ),
                                           SizedBox(width: 4),
                                           Text(
                                             'PREMIUM',
@@ -227,44 +254,100 @@ class _SliverHomeCardState extends State<SliverHomeCard>
                               ],
                             ),
                           ),
-                          Container(
-                            width: double.infinity,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: isActuallyPremium 
-                                  ? Colors.white.withValues(alpha: 0.2) 
-                                  : AppColors.primaryDark.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(24),
-                              border: isActuallyPremium 
-                                  ? Border.all(color: Colors.white.withValues(alpha: 0.3)) 
-                                  : null,
-                              boxShadow: [
-                                if (!isActuallyPremium)
-                                  BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    offset: const Offset(0, 2),
+                          // White on the teal card, so it reads as the one
+                          // thing to press. Readers who already own an exam
+                          // get the quiet translucent version instead.
+                          AnimatedBuilder(
+                            animation: _pulseController,
+                            builder: (context, child) {
+                              final t = isActuallyPremium
+                                  ? 0.0
+                                  : Curves.easeInOut.transform(
+                                      _pulseController.value,
+                                    );
+                              return Transform.scale(
+                                scale: 1 + t * 0.018,
+                                child: Container(
+                                  width: double.infinity,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    color: isActuallyPremium
+                                        ? Colors.white.withValues(alpha: 0.2)
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: isActuallyPremium
+                                        ? Border.all(
+                                            color: Colors.white.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                          )
+                                        : null,
+                                    boxShadow: isActuallyPremium
+                                        ? null
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.white.withValues(
+                                                alpha: 0.25 + t * 0.35,
+                                              ),
+                                              blurRadius: 12 + t * 14,
+                                              spreadRadius: t * 2,
+                                            ),
+                                            BoxShadow(
+                                              color: Colors.black.withValues(
+                                                alpha: 0.15,
+                                              ),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ],
                                   ),
-                              ],
-                            ),
+                                  child: child,
+                                ),
+                              );
+                            },
                             child: TextButton.icon(
                               onPressed: () {
                                 Navigator.of(context).pushNamed('/unlock');
                               },
                               icon: Icon(
-                                isActuallyPremium ? Icons.add_rounded : Icons.lock_open_rounded, 
-                                color: Colors.white, 
-                                size: 18
+                                isActuallyPremium
+                                    ? Icons.add_rounded
+                                    : Icons.lock_open_rounded,
+                                color: isActuallyPremium
+                                    ? Colors.white
+                                    : AppColors.primary,
+                                size: 20,
                               ),
                               label: Text(
-                                isActuallyPremium ? 'Unlock More Exams' : 'Unlock Now',
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                isActuallyPremium
+                                    ? 'Unlock More Exams'
+                                    : 'Unlock Now',
+                                style: TextStyle(
+                                  color: isActuallyPremium
+                                      ? Colors.white
+                                      : AppColors.primary,
                                   fontSize: 16,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w900,
                                 ),
                               ),
                             ),
                           ),
+
+                          // Sits under the button, clear of the artwork, so it
+                          // explains the button without covering the card.
+                            const SizedBox(height: 2),
+                            Text(
+                              'Enter your code to activate the full app and unlock exams.',
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.black.withValues(alpha: 0.9),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+
                         ],
                       );
                     },

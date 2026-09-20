@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/device_lock_exception.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/foundation.dart';
@@ -66,6 +67,35 @@ class AuthService {
     return null;
   }
 
+  /// An admin's account belongs to the admin panel.
+  ///
+  /// The panel turns away anyone who is not an admin; this is the same door on
+  /// this side. Without it an admin's email signs in here as well and picks up
+  /// a student profile, which muddles the two.
+  Future<void> _refuseAdminAccount(User firebaseUser) async {
+    bool isAdmin = false;
+    try {
+      final adminDoc =
+          await _firestore.collection('admins').doc(firebaseUser.uid).get();
+      isAdmin = adminDoc.exists;
+    } catch (e) {
+      // Cannot tell right now (no connection, say). Let the sign-in through
+      // rather than locking a student out over a failed lookup.
+      debugPrint('Admin check skipped: $e');
+      return;
+    }
+    if (!isAdmin) return;
+
+    await _auth.signOut();
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (_) {}
+    throw Exception(
+      'This email is registered for the admin panel. Sign in to the admin '
+      'panel with it, or use a different email for the student app.',
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // 2. EMAIL & PASSWORD LOGIN
   // ---------------------------------------------------------------------------
@@ -76,6 +106,8 @@ class AuthService {
         password: password,
       );
       if (cred.user != null) {
+        await _refuseAdminAccount(cred.user!);
+
         // Update last login
         try {
           await _firestore.collection('users').doc(cred.user!.uid).update({
@@ -103,8 +135,10 @@ class AuthService {
       throw Exception(_handleAuthError(e.code));
     } catch (e, stackTrace) {
       debugPrint('Login General Exception: $e\n$stackTrace');
-      if (e.toString().contains('suspended by the admin') ||
-          e.toString().contains('locked to another device')) {
+      // A device lock is passed on by type: its wording changes with how
+      // many self-service moves are left, so matching the text missed it.
+      if (e is DeviceLockException ||
+          e.toString().contains('suspended by the admin')) {
         rethrow;
       }
       throw Exception('An unexpected error occurred during login.');
@@ -138,6 +172,8 @@ class AuthService {
         throw Exception('Authentication failed securely.');
       }
 
+      await _refuseAdminAccount(firebaseUser);
+
       final doc = await _firestore
           .collection('users')
           .doc(firebaseUser.uid)
@@ -166,18 +202,23 @@ class AuthService {
       debugPrint(
         'Google Sign-In FirebaseAuthException [${e.code}]: ${e.message}\n$stackTrace',
       );
-      final isStale = e.code == 'invalid-credential' || 
-                      (e.message != null && e.message!.contains('stale'));
+      final isStale =
+          e.code == 'invalid-credential' ||
+          (e.message != null && e.message!.contains('stale'));
       if (isStale) {
         throw Exception(
           "Your phone's date and time are incorrect. Please go to your settings and correct your date and time to continue.",
         );
       }
       throw Exception(_handleAuthError(e.code, isGoogle: true));
+    } on GoogleSignInUnavailable {
+      rethrow;
     } catch (e, stackTrace) {
       debugPrint('Google Sign-In General Exception: $e\n$stackTrace');
-      if (e.toString().contains('suspended by the admin') ||
-          e.toString().contains('locked to another device')) {
+      // A device lock is passed on by type: its wording changes with how
+      // many self-service moves are left, so matching the text missed it.
+      if (e is DeviceLockException ||
+          e.toString().contains('suspended by the admin')) {
         rethrow;
       }
       throw Exception('Google Sign-In Error: $e');
@@ -191,21 +232,32 @@ class AuthService {
       final GoogleSignInAccount googleUser;
       try {
         googleUser = await GoogleSignIn.instance.authenticate();
-      } catch (e) {
-        debugPrint('Google Sign-In was cancelled by the user: $e');
-        return null;
+      } on GoogleSignInException catch (e) {
+        // Only a real cancel is silent. Anything else -- most often an app
+        // signing key that Firebase does not know -- used to be swallowed
+        // here and surface as "User profile data is missing".
+        if (e.code == GoogleSignInExceptionCode.canceled ||
+            e.code == GoogleSignInExceptionCode.interrupted) {
+          debugPrint('Google Sign-In was cancelled by the user: $e');
+          return null;
+        }
+        debugPrint('Google Sign-In failed [${e.code}]: ${e.description}');
+        throw GoogleSignInUnavailable(e.code, e.description);
       }
 
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
 
       if (idToken == null) {
-        throw Exception('Google Sign-In failed securely: No ID Token generated.');
+        throw Exception(
+          'Google Sign-In failed securely: No ID Token generated.',
+        );
       }
 
-      final authClient = await googleUser.authorizationClient.authorizeScopes(
-        ['email', 'profile'],
-      );
+      final authClient = await googleUser.authorizationClient.authorizeScopes([
+        'email',
+        'profile',
+      ]);
       final accessToken = authClient.accessToken;
 
       final credential = GoogleAuthProvider.credential(
@@ -216,11 +268,16 @@ class AuthService {
       final cred = await _auth.signInWithCredential(credential);
       return cred.user;
     } on FirebaseAuthException catch (e) {
-      debugPrint('Google Mobile Sign-In FirebaseAuthException [${e.code}]: ${e.message}');
-      final isStale = e.code == 'invalid-credential' || 
-                      (e.message != null && e.message!.contains('stale'));
+      debugPrint(
+        'Google Mobile Sign-In FirebaseAuthException [${e.code}]: ${e.message}',
+      );
+      final isStale =
+          e.code == 'invalid-credential' ||
+          (e.message != null && e.message!.contains('stale'));
       if (isStale && !isRetry) {
-        debugPrint('⚠️ Stale Google ID token detected. Disconnecting and retrying...');
+        debugPrint(
+          '⚠️ Stale Google ID token detected. Disconnecting and retrying...',
+        );
         try {
           await GoogleSignIn.instance.disconnect();
         } catch (discErr) {
@@ -229,12 +286,17 @@ class AuthService {
         return await _signInWithGoogleMobileWithRetry(isRetry: true);
       }
       rethrow;
+    } on GoogleSignInUnavailable {
+      rethrow;
     } catch (e) {
       debugPrint('Google Mobile Sign-In Exception: $e');
-      final isStale = e.toString().contains('invalid-credential') || 
-                      e.toString().contains('stale');
+      final isStale =
+          e.toString().contains('invalid-credential') ||
+          e.toString().contains('stale');
       if (isStale && !isRetry) {
-        debugPrint('⚠️ Stale Google ID token detected (general catch). Disconnecting and retrying...');
+        debugPrint(
+          '⚠️ Stale Google ID token detected (general catch). Disconnecting and retrying...',
+        );
         try {
           await GoogleSignIn.instance.disconnect();
         } catch (discErr) {
@@ -246,7 +308,10 @@ class AuthService {
     }
   }
 
-  Future<void> _reauthenticateGoogleMobileWithRetry(User user, {bool isRetry = false}) async {
+  Future<void> _reauthenticateGoogleMobileWithRetry(
+    User user, {
+    bool isRetry = false,
+  }) async {
     try {
       await GoogleSignIn.instance.signOut();
       final GoogleSignInAccount googleUser;
@@ -261,12 +326,15 @@ class AuthService {
       final idToken = googleAuth.idToken;
 
       if (idToken == null) {
-        throw Exception('Google Re-auth failed securely: No ID Token generated.');
+        throw Exception(
+          'Google Re-auth failed securely: No ID Token generated.',
+        );
       }
 
-      final authClient = await googleUser.authorizationClient.authorizeScopes(
-        ['email', 'profile'],
-      );
+      final authClient = await googleUser.authorizationClient.authorizeScopes([
+        'email',
+        'profile',
+      ]);
       final accessToken = authClient.accessToken;
 
       final credential = GoogleAuthProvider.credential(
@@ -276,11 +344,16 @@ class AuthService {
 
       await user.reauthenticateWithCredential(credential);
     } on FirebaseAuthException catch (e) {
-      debugPrint('Google Re-auth FirebaseAuthException [${e.code}]: ${e.message}');
-      final isStale = e.code == 'invalid-credential' || 
-                      (e.message != null && e.message!.contains('stale'));
+      debugPrint(
+        'Google Re-auth FirebaseAuthException [${e.code}]: ${e.message}',
+      );
+      final isStale =
+          e.code == 'invalid-credential' ||
+          (e.message != null && e.message!.contains('stale'));
       if (isStale && !isRetry) {
-        debugPrint('⚠️ Stale Google ID token detected during re-auth. Disconnecting and retrying...');
+        debugPrint(
+          '⚠️ Stale Google ID token detected during re-auth. Disconnecting and retrying...',
+        );
         try {
           await GoogleSignIn.instance.disconnect();
         } catch (discErr) {
@@ -292,10 +365,13 @@ class AuthService {
       rethrow;
     } catch (e) {
       debugPrint('Google Re-auth Exception: $e');
-      final isStale = e.toString().contains('invalid-credential') || 
-                      e.toString().contains('stale');
+      final isStale =
+          e.toString().contains('invalid-credential') ||
+          e.toString().contains('stale');
       if (isStale && !isRetry) {
-        debugPrint('⚠️ Stale Google ID token detected during re-auth (general catch). Disconnecting and retrying...');
+        debugPrint(
+          '⚠️ Stale Google ID token detected during re-auth (general catch). Disconnecting and retrying...',
+        );
         try {
           await GoogleSignIn.instance.disconnect();
         } catch (discErr) {
@@ -402,7 +478,9 @@ class AuthService {
               await batch.commit();
             }
           } catch (e) {
-            debugPrint("Failed to delete subcollection $subName during self-delete: $e");
+            debugPrint(
+              "Failed to delete subcollection $subName during self-delete: $e",
+            );
           }
         }());
       }
@@ -420,8 +498,9 @@ class AuthService {
       await user.delete();
     } on FirebaseAuthException catch (e, stackTrace) {
       debugPrint('Delete Account Error [${e.code}]: ${e.message}\n$stackTrace');
-      final isStale = e.code == 'invalid-credential' || 
-                      (e.message != null && e.message!.contains('stale'));
+      final isStale =
+          e.code == 'invalid-credential' ||
+          (e.message != null && e.message!.contains('stale'));
       if (isStale) {
         throw Exception(
           "Your phone's date and time are incorrect. Please go to your settings and correct your date and time to continue.",
@@ -491,6 +570,11 @@ class AuthService {
   }
 
   Future<UserModel?> tryAutoLogin() async {
+    final signedIn = _auth.currentUser;
+    if (signedIn != null) {
+      // An admin who was already signed in here before the two were separated.
+      await _refuseAdminAccount(signedIn);
+    }
     final user = _auth.currentUser;
     if (user == null) return null;
     if (!_shouldRefreshFromFirestore()) {
@@ -506,8 +590,10 @@ class AuthService {
       return freshUser;
     } catch (e, stackTrace) {
       debugPrint('Auto Login Refresh Error: $e\n$stackTrace');
-      if (e.toString().contains('suspended by the admin') ||
-          e.toString().contains('locked to another device')) {
+      // A device lock is passed on by type: its wording changes with how
+      // many self-service moves are left, so matching the text missed it.
+      if (e is DeviceLockException ||
+          e.toString().contains('suspended by the admin')) {
         rethrow;
       }
       return _getUserFromCache();
@@ -526,8 +612,10 @@ class AuthService {
       return fresh;
     } catch (e, stackTrace) {
       debugPrint('Force Refresh Error: $e\n$stackTrace');
-      if (e.toString().contains('suspended by the admin') ||
-          e.toString().contains('locked to another device')) {
+      // A device lock is passed on by type: its wording changes with how
+      // many self-service moves are left, so matching the text missed it.
+      if (e is DeviceLockException ||
+          e.toString().contains('suspended by the admin')) {
         rethrow;
       }
       return _getUserFromCache();
@@ -588,10 +676,7 @@ class AuthService {
     final userData = newUser.toMap();
     userData['lastLogin'] = FieldValue.serverTimestamp();
 
-    await _firestore
-        .collection('users')
-        .doc(firebaseUser.uid)
-        .set(userData);
+    await _firestore.collection('users').doc(firebaseUser.uid).set(userData);
     await _cacheUserLocally(newUser);
     return newUser;
   }
@@ -635,9 +720,18 @@ class AuthService {
             isActive: loggedInUser.isActive,
           );
         } else if (loggedInUser.deviceId != currentDeviceId) {
-          await logout();
-          throw Exception(
-            'This account is locked to another device. You can only use Pass At Once on your registered device. Please contact support if you need to switch devices.',
+          // Signed in on a phone this account is not bound to. The session is
+          // deliberately left open: moving the binding is a write to the
+          // reader's own document, so they must still be authenticated for it.
+          // The sign-in screen either moves them or signs them out.
+          final data = doc.data() as Map<String, dynamic>;
+          final used = (data['deviceChangeCount'] as num?)?.toInt() ?? 0;
+          final limit =
+              (data['deviceChangeLimit'] as num?)?.toInt() ?? selfServiceMoves;
+          throw DeviceLockException(
+            uid: uid,
+            movesLeft: (limit - used).clamp(0, limit),
+            boundDeviceName: _describeDevice(loggedInUser.deviceInfo),
           );
         }
 
@@ -649,6 +743,79 @@ class AuthService {
       rethrow;
     }
     return null;
+  }
+
+  /// How many times a reader may move their account to a new phone on their
+  /// own before an admin has to step in. Kept small on purpose: it covers a
+  /// lost or replaced phone without letting one activation be passed around.
+  static const int selfServiceMoves = 2;
+
+  static String? _describeDevice(Map<String, dynamic>? info) {
+    if (info == null) return null;
+    final name = (info['model'] ?? info['name'] ?? info['device'])?.toString();
+    final brand = (info['brand'] ?? info['manufacturer'])?.toString();
+    if (name == null || name.trim().isEmpty) return null;
+    return (brand == null || brand.trim().isEmpty || name.startsWith(brand))
+        ? name
+        : '$brand $name';
+  }
+
+  /// Move the account -- and everything it has bought -- onto this phone.
+  ///
+  /// The activation lives on the top level `deviceId` and again inside every
+  /// entry of `examSelections`, so all of them move together; leaving any
+  /// behind would sign the reader in but keep their exams locked. The old
+  /// phone is signed out the next time it checks, because its id no longer
+  /// matches.
+  Future<UserModel?> moveAccountToThisDevice(String uid) async {
+    final newDeviceId = await DeviceHelper.getDeviceId();
+    final newDeviceInfo = await DeviceHelper.getDeviceInfo();
+    final ref = _firestore.collection('users').doc(uid);
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw Exception('Account not found.');
+      }
+      final data = snap.data() as Map<String, dynamic>;
+      final used = (data['deviceChangeCount'] as num?)?.toInt() ?? 0;
+      final limit =
+          (data['deviceChangeLimit'] as num?)?.toInt() ?? selfServiceMoves;
+      if (used >= limit) {
+        throw DeviceLockException(uid: uid, movesLeft: 0);
+      }
+
+      final previous = data['deviceId'];
+      final updates = <String, dynamic>{
+        'deviceId': newDeviceId,
+        'deviceInfo': newDeviceInfo,
+        'deviceChangeCount': used + 1,
+        'deviceHistory': FieldValue.arrayUnion([
+          {
+            'from': previous,
+            'to': newDeviceId,
+            'at': DateTime.now().toIso8601String(),
+            'by': 'user',
+            'device': _describeDevice(newDeviceInfo),
+          },
+        ]),
+      };
+
+      // every purchase carries its own copy of the binding
+      final selections = data['examSelections'];
+      if (selections is Map) {
+        for (final examType in selections.keys) {
+          final selection = selections[examType];
+          if (selection is Map && selection.containsKey('deviceId')) {
+            updates['examSelections.$examType.deviceId'] = newDeviceId;
+          }
+        }
+      }
+
+      tx.update(ref, updates);
+    });
+
+    return _fetchAndCacheUser(uid);
   }
 
   UserModel? _getUserFromCache() {
@@ -690,7 +857,7 @@ class AuthService {
       interests: user.interests,
       schoolStatus: user.schoolStatus,
       phone: user.phone,
-      isPremium: user.isPremium,
+      isPremium: user.isPremiumGlobal,
       deviceId: user.deviceId,
       deviceInfo: user.deviceInfo,
       referredBy: user.referredBy,
@@ -728,4 +895,24 @@ class AuthService {
             : 'Authentication failed. Please try again.';
     }
   }
+}
+
+/// Google sign-in could not run at all (as opposed to the user backing out).
+class GoogleSignInUnavailable implements Exception {
+  GoogleSignInUnavailable(this.code, this.description);
+
+  final GoogleSignInExceptionCode code;
+  final String? description;
+
+  @override
+  String toString() => switch (code) {
+        GoogleSignInExceptionCode.clientConfigurationError ||
+        GoogleSignInExceptionCode.providerConfigurationError =>
+          'Google Sign-In is not available on this version of the app yet. '
+              'Please sign in with your email and password, or try again later.',
+        GoogleSignInExceptionCode.uiUnavailable =>
+          'Google Sign-In could not open on this device. Please make sure a '
+              'Google account is added in your phone settings.',
+        _ => 'Google Sign-In failed. Please try again.',
+      };
 }

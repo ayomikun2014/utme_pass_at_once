@@ -68,16 +68,26 @@ class _SimulatorSessionSetupState extends State<SimulatorSessionSetup> {
           onTimeout: () => ['2024', '2023', '2022'],
         );
 
-        if (!widget.isPremium && years.length > 2) {
-          years = years.take(2).toList();
+        if (!widget.isPremium) {
+          if (years.isNotEmpty) {
+            years.sort((a, b) => a.compareTo(b)); // Ascending: earliest year first
+            final earliestYear = years.first;
+            years = [earliestYear];
+          }
+        } else {
+          years.sort((a, b) => b.compareTo(a));
         }
 
-        years.sort((a, b) => b.compareTo(a));
         _availableYearsMap[subject] = years;
         _selectedYearsMap[subject] = years.first;
       } catch (e) {
-        _availableYearsMap[subject] = ['2023', '2022'];
-        _selectedYearsMap[subject] = '2023';
+        if (!widget.isPremium) {
+          _availableYearsMap[subject] = ['2014'];
+          _selectedYearsMap[subject] = '2014';
+        } else {
+          _availableYearsMap[subject] = ['2023', '2022'];
+          _selectedYearsMap[subject] = '2023';
+        }
       }
     }
 
@@ -290,10 +300,13 @@ class _SimulatorSessionSetupState extends State<SimulatorSessionSetup> {
                _buildSummaryRow(
                   Icons.date_range_rounded, 
                   'Year Configuration', 
-                  _globalExamMode == 'practice' ? 'Specific Years Selected' :
-                  _globalYearMode == 'latest_1' ? 'Latest 1 Year' : 
-                  _globalYearMode == 'latest_2' ? 'Latest 2 Years' :
-                  _globalYearMode == 'latest_3' ? 'Latest 3 Years' : 'Mixed Random',
+                  _globalExamMode == 'practice' 
+                      ? _selectedYearsMap.values.toSet().length == 1
+                          ? 'Year ${_selectedYearsMap.values.first}'
+                          : _selectedYearsMap.entries.map((e) => '${e.key}: ${e.value}').join(', ')
+                      : _globalYearMode == 'latest_1' ? 'Latest 1 Year' 
+                      : _globalYearMode == 'latest_2' ? 'Latest 2 Years'
+                      : _globalYearMode == 'latest_3' ? 'Latest 3 Years' : 'Mixed Random',
                ),
                const SizedBox(height: 12),
                _buildSummaryRow(
@@ -386,6 +399,31 @@ class _SimulatorSessionSetupState extends State<SimulatorSessionSetup> {
     );
   }
 
+  Widget _buildWatermark() {
+    String? imagePath;
+    if (widget.examType == 'jamb') {
+      imagePath = 'assets/images/jamb.webp';
+    } else if (widget.examType == 'post_utme') {
+      imagePath = 'assets/images/post_utme.webp';
+    }
+
+    if (imagePath == null) return const SizedBox();
+
+    return Positioned.fill(
+      child: Center(
+        child: Opacity(
+          opacity: 0.05,
+          child: Image.asset(
+            imagePath,
+            width: 280,
+            height: 280,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -395,6 +433,7 @@ class _SimulatorSessionSetupState extends State<SimulatorSessionSetup> {
       body: Stack(
         children: [
           const BlobBackground(),
+          _buildWatermark(),
           CustomScrollView(
             slivers: [
               CustomAppBar(

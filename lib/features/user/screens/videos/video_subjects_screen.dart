@@ -202,8 +202,10 @@ class _VideoSubjectsScreenState extends State<VideoSubjectsScreen> {
   Widget _buildTrackSelectionChips(ThemeData theme, bool isDark, VideoProvider provider) {
     return TutorialService.instance.buildShowcase(
       key: TutorialService.instance.tutorialTrackKey,
-      title: 'Track Selection 🧬',
-      description: 'Toggle between All, Science, and Art tracks to filter subjects relevant to your study path.',
+      icon: Icons.category_rounded,
+      accent: const Color(0xFF7C3AED),
+      title: 'Your track',
+      description: 'Show only the subjects you sit: All, Science or Art. The list below changes with your choice.',
       context: context,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
@@ -263,8 +265,10 @@ class _VideoSubjectsScreenState extends State<VideoSubjectsScreen> {
   Widget _buildSearchBar(ThemeData theme, bool isDark) {
     return TutorialService.instance.buildShowcase(
       key: TutorialService.instance.tutorialSearchKey,
-      title: 'Search Subjects 🔍',
-      description: 'Search for specific subjects to quickly access video lectures, topic outlines, and expert video explanations.',
+      icon: Icons.search_rounded,
+      accent: const Color(0xFF0EA5E9),
+      title: 'Find a subject fast',
+      description: 'Type a subject to jump straight to its video lessons instead of scrolling the whole list.',
       context: context,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16),

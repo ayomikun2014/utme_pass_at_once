@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../models/app_settings_model.dart';
+import '../services/backend_api.dart';
 import '../services/settings_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
@@ -37,6 +38,7 @@ class SettingsProvider extends ChangeNotifier {
       _installedVersion = packageInfo.version;
 
       _settings = await _service.fetchSettings();
+      _applyBackend(_settings);
 
       debugPrint(
         '✅ Settings loaded: phones=${_settings.supportPhones.length}, email=${_settings.contactEmail}, whatsapp=${_settings.whatsappNumber}',
@@ -46,6 +48,7 @@ class SettingsProvider extends ChangeNotifier {
       _subscription = _service.watchSettings().listen(
             (updatedSettings) {
           _settings = updatedSettings;
+          _applyBackend(updatedSettings);
           notifyListeners();
         },
         onError: (error) {
@@ -60,6 +63,10 @@ class SettingsProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  void _applyBackend(AppSettingsModel s) {
+    BackendApi.applySettings(backendBaseUrl: s.backendBaseUrl, supabaseUrl: s.supabaseUrl);
   }
 
   Future<void> refresh() async {

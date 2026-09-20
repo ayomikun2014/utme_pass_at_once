@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:utme_pass_at_once/core/utils/institution_logos.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -107,11 +108,15 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
       final simProvider = context.read<SimulatorProvider>();
 
       _isPremium = simProvider.hasPremiumForExam(authProvider, widget.examType);
-      debugPrint('🔧 [INSTITUTION] isPremium=$_isPremium for examType=${widget.examType}');
+      debugPrint(
+        '🔧 [INSTITUTION] isPremium=$_isPremium for examType=${widget.examType}',
+      );
 
       if (_isPremium) {
         // Premium user: load from local Hive cache, filtered to activated institutions only
-        debugPrint('🔧 [OFFLINE] Loading institutions from local cache (premium user)');
+        debugPrint(
+          '🔧 [OFFLINE] Loading institutions from local cache (premium user)',
+        );
 
         final user = authProvider.currentUser;
         final activatedCenters = user?.getExamCenters(widget.examType) ?? [];
@@ -134,7 +139,10 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
 
           if (allMapping.containsKey(baseId)) {
             final baseData = allMapping[baseId]!;
-            final section = user?.getSectionForInstitution(widget.examType, centerId);
+            final section = user?.getSectionForInstitution(
+              widget.examType,
+              centerId,
+            );
 
             // Create a unique entry for this specific activation
             final displayData = Map<String, dynamic>.from(baseData);
@@ -145,7 +153,9 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
             }
 
             filteredMapping[lowerCenterId] = displayData;
-            debugPrint('🔧 [OFFLINE] ✅ Found cached data for activated institution: $lowerCenterId (Base: $baseId)');
+            debugPrint(
+              '🔧 [OFFLINE] ✅ Found cached data for activated institution: $lowerCenterId (Base: $baseId)',
+            );
           }
         }
 
@@ -156,12 +166,16 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
         });
 
         _animController.forward(from: 0);
-        debugPrint('🔧 [OFFLINE] Showing ${filteredMapping.length} activated institutions');
+        debugPrint(
+          '🔧 [OFFLINE] Showing ${filteredMapping.length} activated institutions',
+        );
 
         // If only one institution, skip selection and go directly to dashboard
         if (filteredMapping.length == 1) {
           final entry = filteredMapping.entries.first;
-          debugPrint('🔧 [OFFLINE] Only 1 institution, auto-navigating to dashboard (Replacing route)');
+          debugPrint(
+            '🔧 [OFFLINE] Only 1 institution, auto-navigating to dashboard (Replacing route)',
+          );
 
           Future.microtask(() {
             if (mounted) {
@@ -181,20 +195,31 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
         }
       } else {
         // Free user: load from local Hive cache if available, fallback to online Firestore
-        debugPrint('🔧 [OFFLINE] Loading institutions from local cache (free user)');
-        Map<String, Map<String, dynamic>> mapping = await simProvider.getInstitutionMapping(
-          widget.examType,
-          isPremium: true,
+        debugPrint(
+          '🔧 [OFFLINE] Loading institutions from local cache (free user)',
         );
+        Map<String, Map<String, dynamic>> mapping = await simProvider
+            .getInstitutionMapping(widget.examType, isPremium: true);
 
         if (mapping.isEmpty && NetworkService.instance.isOnline) {
-          debugPrint('🌐 [ONLINE] Local cache empty, loading institutions from Firestore (free user)');
-          mapping = await simProvider.getInstitutionMapping(widget.examType, isPremium: false);
-          
+          debugPrint(
+            '🌐 [ONLINE] Local cache empty, loading institutions from Firestore (free user)',
+          );
+          mapping = await simProvider.getInstitutionMapping(
+            widget.examType,
+            isPremium: false,
+          );
+
           // Cache them locally so they work offline next time!
-          final onlineInsts = await simProvider.getAvailableInstitutions(widget.examType, isPremium: false);
+          final onlineInsts = await simProvider.getAvailableInstitutions(
+            widget.examType,
+            isPremium: false,
+          );
           if (onlineInsts.isNotEmpty) {
-            await SimulatorService().cacheInstitutions(widget.examType, onlineInsts);
+            await SimulatorService().cacheInstitutions(
+              widget.examType,
+              onlineInsts,
+            );
           }
         }
 
@@ -263,12 +288,44 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
       },
     );
   }
+
+  Widget _buildWatermark() {
+    String? imagePath;
+    if (widget.examType == 'jamb') {
+      imagePath = 'assets/images/jamb.webp';
+    } else if (widget.examType == 'post_utme') {
+      imagePath = 'assets/images/post_utme.webp';
+    }
+
+    if (imagePath == null) return const SizedBox();
+
+    return Positioned.fill(
+      child: Center(
+        child: Opacity(
+          opacity: 0.05,
+          child: Image.asset(
+            imagePath,
+            width: 280,
+            height: 280,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      body: Stack(children: [const BlobBackground(), _buildContentArea(theme)]),
+      body: Stack(
+        children: [
+          const BlobBackground(),
+          _buildWatermark(),
+          _buildContentArea(theme),
+        ],
+      ),
     );
   }
 
@@ -289,7 +346,9 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
           ? 'Post-UTME'
           : widget.examType.toUpperCase(),
       subtitle: 'Choose your institution to get started.',
-      color: AppColors.dynamicColors[0].withValues(alpha: 0.9), // Pulling from dynamicColors
+      color: AppColors.dynamicColors[0].withValues(
+        alpha: 0.9,
+      ), // Pulling from dynamicColors
       isLeading: true,
       centerTitle: true,
     );
@@ -345,7 +404,7 @@ class _InstitutionSelectionScreenState extends State<InstitutionSelectionScreen>
           childAspectRatio: _Constants.cardAspectRatio,
         ),
         delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildInstitutionCard(index),
+          (context, index) => _buildInstitutionCard(index),
           childCount: _filteredInstitutions.length,
         ),
       ),
@@ -395,12 +454,12 @@ class _SearchBarWidget extends StatelessWidget {
         ),
         boxShadow: !isDark
             ? [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ]
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
             : null,
       ),
       child: TextField(
@@ -676,6 +735,16 @@ class _InstitutionCardState extends State<_InstitutionCard> {
   }
 
   Widget _buildLogoImage() {
+    // A bundled logo wins: the URL on the record points at Firebase Storage,
+    // which this project cannot serve.
+    final asset = InstitutionLogos.assetFor(widget.code);
+    if (asset != null) {
+      return Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Image.asset(asset, fit: BoxFit.contain),
+      );
+    }
+
     final hasLogo = widget.logo != null && widget.logo!.trim().isNotEmpty;
 
     if (!hasLogo) return const SizedBox.shrink();
@@ -698,7 +767,9 @@ class _InstitutionCardState extends State<_InstitutionCard> {
   }
 
   Widget _buildInitials() {
-    final hasLogo = widget.logo != null && widget.logo!.trim().isNotEmpty;
+    final hasLogo =
+        InstitutionLogos.assetFor(widget.code) != null ||
+        (widget.logo != null && widget.logo!.trim().isNotEmpty);
     if (hasLogo) return const SizedBox.shrink();
 
     final initials = widget.code.length >= 2
@@ -754,7 +825,9 @@ class _InstitutionCardState extends State<_InstitutionCard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isDark ? brandColor.withValues(alpha: 0.2) : brandColor.withValues(alpha: 0.1),
+        color: isDark
+            ? brandColor.withValues(alpha: 0.2)
+            : brandColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: brandColor.withValues(alpha: 0.3)),
       ),
@@ -770,7 +843,11 @@ class _InstitutionCardState extends State<_InstitutionCard> {
             ),
           ),
           const SizedBox(width: 3),
-          Icon(Icons.arrow_forward_rounded, size: 11, color: isDark ? Colors.white : brandColor),
+          Icon(
+            Icons.arrow_forward_rounded,
+            size: 11,
+            color: isDark ? Colors.white : brandColor,
+          ),
         ],
       ),
     );
@@ -783,10 +860,7 @@ class _InstitutionCardState extends State<_InstitutionCard> {
     final Color baseColor = AppColors.dynamicColors[paletteIndex];
 
     // Create a beautiful subtle gradient from the single dynamic color
-    return [
-      baseColor,
-      baseColor.withValues(alpha: 0.75),
-    ];
+    return [baseColor, baseColor.withValues(alpha: 0.75)];
   }
 
   _CardAnimations _buildAnimations(List<Color> colors) {
@@ -798,9 +872,9 @@ class _InstitutionCardState extends State<_InstitutionCard> {
     );
 
     final slideAnim =
-    Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(
-      CurvedAnimation(parent: widget.animController, curve: curveInterval),
-    );
+        Tween<Offset>(begin: const Offset(0, 0.18), end: Offset.zero).animate(
+          CurvedAnimation(parent: widget.animController, curve: curveInterval),
+        );
 
     final fadeAnim = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(

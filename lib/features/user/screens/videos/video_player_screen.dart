@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:utme_pass_at_once/core/constants/app_colors.dart';
 import 'package:utme_pass_at_once/features/user/models/video_model.dart';
@@ -20,13 +21,16 @@ class VideoPlayerScreen extends StatefulWidget {
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTickerProviderStateMixin {
+class _VideoPlayerScreenState extends State<VideoPlayerScreen>
+    with SingleTickerProviderStateMixin {
   WebViewController? _webViewController;
   late TabController _tabController;
   List<Map<String, dynamic>> _notes = [];
   bool _isLoading = true;
-  bool _isPlayerReady = false;
   String? _playerError;
+
+  /// YouTube's own fullscreen view, handed to us by the WebView.
+  Widget? _fullscreenPlayer;
   late String _currentTip;
 
   final List<String> _loadingTips = [
@@ -39,23 +43,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
     "Simulator Ready: After watching this tutorial, go to the Exam Simulator to practice actual past questions on this topic! 🧪",
     "Exam Warning: Never bring any mobile phones or unauthorized electronic devices to the JAMB exam center. Be safe! ⚠️",
     "Practice Mode: Solving past questions repeatedly builds muscle memory and boosts confidence for the actual exam! ✍️",
-    "Consistency: A little practice every single day builds up to an outstanding, elite UTME score! 🔥"
+    "Consistency: A little practice every single day builds up to an outstanding, elite UTME score! 🔥",
   ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    
+
     // Select a random study tip
     _currentTip = _loadingTips[Random().nextInt(_loadingTips.length)];
 
-    // Defer initialization to avoid blocking the slide-in transition animation
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        _initWebViewController();
-      }
-    });
+    _initWebViewController();
 
     _loadNotes();
 
@@ -68,220 +67,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
 
   @override
   void dispose() {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     _tabController.dispose();
     super.dispose();
   }
 
-  String? _extractYoutubeId(String url) {
-    final regExp = RegExp(
-      r'(?:https?:\/\/)?(?:www\.|m\.)?(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([\w-]{11})',
-      caseSensitive: false,
-    );
-    final match = regExp.firstMatch(url);
-    if (match != null && match.groupCount >= 1) {
-      return match.group(1);
-    }
-    return null;
-  }
-
-  String _extractVideoId(String url) {
-    String cleanUrl = url.trim();
-
-    if (cleanUrl.startsWith('ttps://')) {
-      cleanUrl = 'https://${cleanUrl.substring(7)}';
-    } else if (cleanUrl.startsWith('ttp://')) {
-      cleanUrl = 'http://${cleanUrl.substring(6)}';
-    } else if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://') && !RegExp(r'^[\w-]{11}$').hasMatch(cleanUrl)) {
-      cleanUrl = 'https://$cleanUrl';
-    }
-
-    final extractedId = _extractYoutubeId(cleanUrl);
-    if (extractedId != null) return extractedId;
-
-    if (RegExp(r'^[\w-]{11}$').hasMatch(cleanUrl)) return cleanUrl;
-
-    try {
-      final uri = Uri.tryParse(cleanUrl);
-      if (uri != null) {
-        if (uri.host.contains('youtube.com')) {
-          if (uri.pathSegments.contains('shorts')) {
-            final shortsIdx = uri.pathSegments.indexOf('shorts');
-            if (uri.pathSegments.length > shortsIdx + 1) {
-              return uri.pathSegments[shortsIdx + 1];
-            }
-          } else {
-            final v = uri.queryParameters['v'] ?? '';
-            if (v.isNotEmpty) return v;
-            if (uri.pathSegments.contains('embed') && uri.pathSegments.length > 1) {
-              return uri.pathSegments.last;
-            }
-          }
-        } else if (uri.host == 'youtu.be' && uri.pathSegments.isNotEmpty) {
-          return uri.pathSegments.first;
-        }
-      }
-    } catch (e) {
-      debugPrint("Error parsing URI in video player: $e");
-    }
-    return '';
-  }
-
-  /// ✅ FIXED: Improved HTML with better YouTube API configuration
-  String _buildPlayerHtml(String videoId) {
-    return '''
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { 
-      width: 100%; 
-      height: 100%; 
-      background: #000; 
-      overflow: hidden; 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    #player { 
-      width: 100%; 
-      height: 100%; 
-    }
-    #error {
-      width: 100%;
-      height: 100%;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      color: #fff;
-      font-size: 16px;
-      text-align: center;
-      padding: 20px;
-    }
-    #error.show {
-      display: flex;
-    }
-  </style>
-</head>
-<body>
-  <div id="player"></div>
-  <div id="error">
-    <p id="error-message">Loading video...</p>
-  </div>
-  
-  <script>
-    var player;
-    var videoId = '$videoId';
-    
-    // Declare tag variable at module level
-    var tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    var firstScriptTag = document.getElementsByTagName('script')[0];
-    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-
-    function onYouTubeIframeAPIReady() {
-      console.log("YouTube API ready, creating player for video: " + videoId);
-      
-      try {
-        player = new YT.Player('player', {
-          width: '100%',
-          height: '100%',
-          videoId: videoId,
-          host: 'https://www.youtube-nocookie.com',
-          playerVars: {
-            'autoplay': 1,
-            'controls': 1,
-            'playsinline': 1,
-            'modestbranding': 1,
-            'rel': 0,
-            'fs': 1,
-            'iv_load_policy': 3,
-            'enablejsapi': 1,
-            'origin': window.location.origin || 'https://www.youtube-nocookie.com'
-          },
-          events: {
-            'onReady': onPlayerReady,
-            'onStateChange': onPlayerStateChange,
-            'onError': onPlayerError
-          }
-        });
-      } catch (error) {
-        console.error("Error creating player: " + error);
-        showError("Failed to initialize player: " + error);
-      }
-    }
-
-    function onPlayerReady(event) {
-      console.log("Player ready, attempting to play");
-      event.target.playVideo();
-    }
-
-    function onPlayerStateChange(event) {
-      console.log("Player state changed: " + event.data);
-    }
-
-    function onPlayerError(event) {
-      console.error("YouTube Player Error: " + event.data);
-      
-      var errorMessages = {
-        2: "Invalid parameter",
-        5: "HTML5 player error",
-        100: "Video not found (removed or private)",
-        101: "Video owner does not allow embedding",
-        150: "Same as 101"
-      };
-      
-      var errorMsg = errorMessages[event.data] || "Unknown error: " + event.data;
-      showError("YouTube Error: " + errorMsg);
-    }
-
-    function showError(message) {
-      document.getElementById('error-message').textContent = message;
-      document.getElementById('error').classList.add('show');
-      document.getElementById('player').style.display = 'none';
-    }
-
-    // Fallback if API doesn't load after timeout
-    setTimeout(function() {
-      if (typeof YT === 'undefined' || !YT.Player) {
-        console.error("YouTube API failed to load");
-        showError("Failed to load YouTube API. Check your internet connection.");
-      }
-    }, 5000);
-  </script>
-</body>
-</html>
-''';
-  }
-
   void _initWebViewController() {
-    final videoId = _extractVideoId(widget.video.url);
-    debugPrint("🎬 Video Player: Original URL: '${widget.video.url}' -> Extracted Video ID: '$videoId'");
+    final videoId = widget.video.youtubeId;
+    debugPrint("🎬 Video: '${widget.video.url}' -> id '$videoId'");
 
     if (videoId.isEmpty) {
       setState(() {
-        _playerError = "Invalid video URL";
+        _playerError = "This video link is not one the player understands.";
         _isLoading = false;
       });
       return;
     }
 
+    // YouTube's own embed page. Loading their page rather than a page of our
+    // own means their player, their controls and their fullscreen button.
+    final embedUrl = Uri.parse(
+      'https://www.youtube-nocookie.com/embed/$videoId'
+      '?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0',
+    );
+
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(const Color(0xFF000000))
-      // ✅ FIX: Better user agent configuration
-      ..setUserAgent('Mozilla/5.0 (Linux; Android 14; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36')
-      // ✅ FIX: Add proper WebView settings
-      ..setOnConsoleMessage((JavaScriptConsoleMessage message) {
-        debugPrint("📱 WebView Console: ${message.message}");
-      })
       ..setNavigationDelegate(
         NavigationDelegate(
-          onPageStarted: (String url) {
+          onPageStarted: (_) {
             if (mounted) {
               setState(() {
                 _isLoading = true;
@@ -289,19 +105,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
               });
             }
           },
-          onPageFinished: (String url) {
-            if (mounted) {
-              setState(() {
-                _isLoading = false;
-                _isPlayerReady = true;
-              });
-            }
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
           },
           onWebResourceError: (WebResourceError error) {
-            debugPrint("❌ WebView Error: ${error.description}");
+            // Sub-resources fail all the time on a weak connection; only a
+            // failure of the page itself is worth telling the reader about.
+            if (!error.isForMainFrame!) return;
+            debugPrint("❌ WebView error: ${error.description}");
             if (mounted) {
               setState(() {
-                _playerError = "Failed to load player: ${error.description}";
+                _playerError = "This video could not be loaded.";
                 _isLoading = false;
               });
             }
@@ -309,15 +123,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
         ),
       );
 
-    if (controller.platform is AndroidWebViewController) {
-      (controller.platform as AndroidWebViewController)
-          .setMediaPlaybackRequiresUserGesture(false);
+    final platform = controller.platform;
+    if (platform is AndroidWebViewController) {
+      platform.setMediaPlaybackRequiresUserGesture(false);
+      // The fullscreen button inside the player asks the host app for a
+      // fullscreen view; without this it does nothing at all.
+      platform.setCustomWidgetCallbacks(
+        onShowCustomWidget: (Widget widget, void Function()? onExit) {
+          if (!mounted) return;
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+          setState(() => _fullscreenPlayer = widget);
+        },
+        onHideCustomWidget: () {
+          if (!mounted) return;
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+          setState(() => _fullscreenPlayer = null);
+        },
+      );
     }
 
-    controller.loadHtmlString(
-      _buildPlayerHtml(videoId),
-      baseUrl: 'https://www.youtube-nocookie.com',
-    );
+    controller.loadRequest(embedUrl);
 
     if (mounted) {
       setState(() {
@@ -329,16 +154,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
   void _reloadVideo() {
     setState(() {
       _isLoading = true;
-      _isPlayerReady = false;
       _playerError = null;
       _currentTip = _loadingTips[Random().nextInt(_loadingTips.length)];
     });
     _initWebViewController();
-    CustomToast.show(
-      context,
-      "Reloading video...",
-      isError: false,
-    );
+    CustomToast.show(context, "Reloading video...", isError: false);
+  }
+
+  /// Some owners do not allow their video to play inside another app. The
+  /// YouTube app or the browser will still play it.
+  Future<void> _openOnYoutube() async {
+    final uri = Uri.parse(widget.video.watchUrl);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else if (mounted) {
+        CustomToast.show(context, "Could not open YouTube.", isError: true);
+      }
+    } catch (e) {
+      debugPrint('Could not open YouTube: $e');
+    }
   }
 
   Future<void> _loadNotes() async {
@@ -408,12 +243,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
             bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
           ),
           child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            margin: EdgeInsets.fromLTRB(
+              16,
+              0,
+              16,
+              16 + MediaQuery.of(sheetContext).viewPadding.bottom,
+            ),
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: isDark ? AppColors.surfaceDark : Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: isDark ? Colors.white12 : Colors.grey.shade200),
+              border: Border.all(
+                color: isDark ? Colors.white12 : Colors.grey.shade200,
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.15),
@@ -439,11 +281,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.edit_note_rounded, color: AppColors.dynamicColors[2], size: 22),
+                    Icon(
+                      Icons.edit_note_rounded,
+                      color: AppColors.dynamicColors[2],
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
                     const Text(
                       "New Revision Note",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ],
                 ),
@@ -458,7 +307,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       color: isDark ? Colors.white12 : Colors.grey.shade200,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
                   child: TextField(
                     controller: titleController,
                     maxLines: 1,
@@ -471,14 +323,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                     ),
                     decoration: const InputDecoration(
                       hintText: "Title (e.g. Newton's First Law)",
-                      hintStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.normal),
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.normal,
+                      ),
                       border: InputBorder.none,
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  constraints: const BoxConstraints(minHeight: 120, maxHeight: 220),
+                  constraints: const BoxConstraints(
+                    minHeight: 120,
+                    maxHeight: 220,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.05)
@@ -488,7 +346,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       color: isDark ? Colors.white12 : Colors.amber.shade100,
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 4,
+                  ),
                   child: TextField(
                     controller: noteController,
                     minLines: 4,
@@ -501,7 +362,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       color: isDark ? Colors.white : Colors.black87,
                     ),
                     decoration: const InputDecoration(
-                      hintText: "Type your note — key concepts, formulas, definitions...",
+                      hintText:
+                          "Type your note — key concepts, formulas, definitions...",
                       hintStyle: TextStyle(fontSize: 13),
                       border: InputBorder.none,
                     ),
@@ -513,11 +375,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                     final title = titleController.text.trim();
                     final content = noteController.text.trim();
                     if (title.isEmpty) {
-                      CustomToast.show(sheetContext, "Please enter a title!", isError: true);
+                      CustomToast.show(
+                        sheetContext,
+                        "Please enter a title!",
+                        isError: true,
+                      );
                       return;
                     }
                     if (content.isEmpty) {
-                      CustomToast.show(sheetContext, "Please type a note first!", isError: true);
+                      CustomToast.show(
+                        sheetContext,
+                        "Please type a note first!",
+                        isError: true,
+                      );
                       return;
                     }
                     _addNote(title, content);
@@ -537,7 +407,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       SizedBox(width: 8),
                       Text(
                         "Save Note",
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -550,6 +424,90 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
     );
   }
 
+  /// The player itself: on screen as soon as there is a controller, with the
+  /// loading state over the top of it rather than in place of it.
+  Widget _buildPlayerArea({required bool isDark, required bool isLandscape}) {
+    if (_playerError != null) {
+      return _buildPlayerErrorState(isLandscape: isLandscape);
+    }
+
+    return Stack(
+      children: [
+        if (_webViewController != null)
+          WebViewWidget(controller: _webViewController!)
+        else
+          const ColoredBox(color: Colors.black, child: SizedBox.expand()),
+        if (_isLoading) ...[
+          _buildLoadingOverlay(isDark, isLandscape: isLandscape),
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              minHeight: 2.5,
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F00)),
+              backgroundColor: Colors.transparent,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// When a video will not play here -- most often because its owner does not
+  /// allow it outside YouTube -- say so and offer the way that works.
+  Widget _buildPlayerErrorState({required bool isLandscape}) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.play_disabled_rounded,
+                color: Colors.white54,
+                size: 40,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _playerError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                alignment: WrapAlignment.center,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _reloadVideo,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Try again'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: const BorderSide(color: Colors.white38),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _openOnYoutube,
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Watch on YouTube'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF0000),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -559,47 +517,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
 
     final visual = _getSubjectVisualDetails(widget.video.subject);
 
+    // The player asked for fullscreen; give it the whole screen.
+    if (_fullscreenPlayer != null) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SizedBox.expand(child: _fullscreenPlayer),
+      );
+    }
+
     if (isLandscape) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            if (_playerError != null)
-              Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.error_outline, color: Colors.red, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      _playerError!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _reloadVideo,
-                      child: const Text("Retry"),
-                    ),
-                  ],
-                ),
-              )
-            else if (_isPlayerReady && _webViewController != null) ...[
-              WebViewWidget(controller: _webViewController!),
-              if (_isLoading)
-                const Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: LinearProgressIndicator(
-                    minHeight: 3,
-                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F00)),
-                    backgroundColor: Colors.transparent,
-                  ),
-                ),
-            ]
-            else
-              _buildLoadingOverlay(isDark, isLandscape: true),
+            _buildPlayerArea(isDark: isDark, isLandscape: true),
             Positioned(
               top: 20,
               left: 20,
@@ -609,9 +540,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                   shape: BoxShape.circle,
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                   onPressed: () {
-                    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                    SystemChrome.setPreferredOrientations([
+                      DeviceOrientation.portraitUp,
+                    ]);
                   },
                 ),
               ),
@@ -636,7 +573,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
         backgroundColor: visual.gradientStart,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 18,
+          ),
           onPressed: () {
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
@@ -660,49 +601,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                 color: Colors.black,
                 child: Stack(
                   children: [
-                    if (_playerError != null)
-                      Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.error_outline, color: Colors.red, size: 48),
-                            const SizedBox(height: 12),
-                            Text(
-                              _playerError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: _reloadVideo,
-                              child: const Text("Retry"),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (_isPlayerReady && _webViewController != null) ...[
-                      WebViewWidget(controller: _webViewController!),
-                      if (_isLoading)
-                        const Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: LinearProgressIndicator(
-                            minHeight: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F00)),
-                            backgroundColor: Colors.transparent,
-                          ),
-                        ),
-                    ]
-                    else
-                      _buildLoadingOverlay(isDark),
+                    _buildPlayerArea(isDark: isDark, isLandscape: false),
                   ],
                 ),
               ),
             ),
 
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 8,
+              ),
               child: Container(
                 height: 44,
                 decoration: BoxDecoration(
@@ -723,7 +632,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                     ],
                   ),
                   labelColor: isDark ? Colors.white : Colors.black87,
-                  unselectedLabelColor: isDark ? Colors.white54 : Colors.black54,
+                  unselectedLabelColor: isDark
+                      ? Colors.white54
+                      : Colors.black54,
                   indicatorSize: TabBarIndicatorSize.tab,
                   dividerColor: Colors.transparent,
                   tabs: const [
@@ -784,7 +695,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
               ),
               if (widget.video.duration.isNotEmpty) ...[
                 const SizedBox(width: 12),
-                Icon(Icons.access_time_rounded, size: 14, color: isDark ? Colors.white60 : Colors.black45),
+                Icon(
+                  Icons.access_time_rounded,
+                  size: 14,
+                  color: isDark ? Colors.white60 : Colors.black45,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   widget.video.duration,
@@ -825,12 +740,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
               color: isDark ? const Color(0xFF1E1736) : Colors.indigo.shade50,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isDark ? const Color(0xFF2E2452) : Colors.indigo.shade100,
+                color: isDark
+                    ? const Color(0xFF2E2452)
+                    : Colors.indigo.shade100,
               ),
             ),
             child: Row(
               children: [
-                Icon(Icons.screen_rotation_rounded, color: isDark ? Colors.indigoAccent : Colors.indigo.shade700),
+                Icon(
+                  Icons.screen_rotation_rounded,
+                  color: isDark ? Colors.indigoAccent : Colors.indigo.shade700,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -839,7 +759,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       fontSize: 12,
                       height: 1.35,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.indigo.shade100 : Colors.indigo.shade900,
+                      color: isDark
+                          ? Colors.indigo.shade100
+                          : Colors.indigo.shade900,
                     ),
                   ),
                 ),
@@ -865,7 +787,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
               const SizedBox(width: 8),
               if (_notes.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.dynamicColors[2].withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -883,11 +808,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
               FilledButton.icon(
                 onPressed: () => _showAddNoteSheet(isDark),
                 icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text("Add Note", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  "Add Note",
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.dynamicColors[2],
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ],
@@ -898,30 +831,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
           child: _notes.isEmpty
               ? _buildEmptyNotesState(isDark)
               : ListView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            itemCount: _notes.length,
-            itemBuilder: (context, index) {
-              return _buildNoteCard(_notes[index], index, isDark);
-            },
-          ),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                  itemCount: _notes.length,
+                  itemBuilder: (context, index) {
+                    return _buildNoteCard(_notes[index], index, isDark);
+                  },
+                ),
         ),
       ],
     );
   }
+
   Widget _buildNoteCard(Map<String, dynamic> note, int index, bool isDark) {
     final content = note['content'] as String? ?? '';
-    final createdAt = DateTime.tryParse(note['createdAt'] ?? '') ?? DateTime.now();
-    final dateStr = '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
-    
+    final createdAt =
+        DateTime.tryParse(note['createdAt'] ?? '') ?? DateTime.now();
+    final dateStr =
+        '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+
     // Support backwards compatibility for old notes that don't have a title
-    final title = note['title'] as String? ?? (content.length > 40 ? '${content.substring(0, 40)}...' : content);
+    final title =
+        note['title'] as String? ??
+        (content.length > 40 ? '${content.substring(0, 40)}...' : content);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
         boxShadow: [
           if (!isDark)
             BoxShadow(
@@ -1016,7 +956,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.amber.shade50,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.amber.shade50,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
@@ -1093,7 +1035,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                         height: 14,
                         child: CircularProgressIndicator(
                           strokeWidth: 2.0,
-                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF8F00)),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFFF8F00),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1115,12 +1059,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                   ),
                   const SizedBox(height: 8),
                   Icon(
-                    Icons.lightbulb_outline_rounded,
-                    color: const Color(0xFFFF8F00),
-                    size: isLandscape ? 24 : 22,
-                  )
-                      .animate(onPlay: (controller) => controller.repeat(reverse: true))
-                      .scale(begin: const Offset(1, 1), end: const Offset(1.15, 1.15), duration: 800.ms),
+                        Icons.lightbulb_outline_rounded,
+                        color: const Color(0xFFFF8F00),
+                        size: isLandscape ? 24 : 22,
+                      )
+                      .animate(
+                        onPlay: (controller) =>
+                            controller.repeat(reverse: true),
+                      )
+                      .scale(
+                        begin: const Offset(1, 1),
+                        end: const Offset(1.15, 1.15),
+                        duration: 800.ms,
+                      ),
                   const SizedBox(height: 6),
                   Text(
                     "CORE STUDY INSIGHT",
@@ -1139,7 +1090,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
                       fontSize: isLandscape ? 12 : 11.5,
                       height: 1.45,
                       fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.white.withValues(alpha: 0.9) : Colors.black87,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.9)
+                          : Colors.black87,
                     ),
                   ),
                 ],
@@ -1182,14 +1135,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
         gradientEnd: const Color(0xFFD84315),
       );
     }
-    if (key.contains('english') || key.contains('literature') || key.contains('lang')) {
+    if (key.contains('english') ||
+        key.contains('literature') ||
+        key.contains('lang')) {
       return _SubjectVisual(
         icon: Icons.menu_book_rounded,
         gradientStart: const Color(0xFF9C27B0),
         gradientEnd: const Color(0xFF7B1FA2),
       );
     }
-    if (key.contains('government') || key.contains('history') || key.contains('civic')) {
+    if (key.contains('government') ||
+        key.contains('history') ||
+        key.contains('civic')) {
       return _SubjectVisual(
         icon: Icons.gavel_rounded,
         gradientStart: const Color(0xFFE91E63),
@@ -1203,7 +1160,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> with SingleTicker
         gradientEnd: const Color(0xFF689F38),
       );
     }
-    if (key.contains('account') || key.contains('commerce') || key.contains('econ')) {
+    if (key.contains('account') ||
+        key.contains('commerce') ||
+        key.contains('econ')) {
       return _SubjectVisual(
         icon: Icons.monetization_on_rounded,
         gradientStart: const Color(0xFF00BCD4),

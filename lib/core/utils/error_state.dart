@@ -31,7 +31,7 @@ Widget buildErrorState(BuildContext context, NewsProvider provider) {
           const SizedBox(height: 24),
 
           Text(
-            'No Signal',
+            'Connection Failed',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.bold,
               fontSize: 20,
@@ -40,7 +40,7 @@ Widget buildErrorState(BuildContext context, NewsProvider provider) {
           const SizedBox(height: 8),
 
           Text(
-            'No internet connection.\nPlease try again',
+            'Please check your internet or connect to the internet.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: isDark ? Colors.white60 : Colors.black54,

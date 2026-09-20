@@ -281,6 +281,21 @@ class _NewsScreenState extends State<NewsScreen> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  // A taste of the story, so the list is readable on its own.
+                  if (news.body.trim().isNotEmpty &&
+                      news.body.trim() != news.title.trim()) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      news.body,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     news.pubDate,

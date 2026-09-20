@@ -1,4 +1,4 @@
-
+import 'question_model.dart';
 
 // =============================================================================
 // INSTITUTION MODEL
@@ -116,12 +116,16 @@ class YearModel {
   final bool hasImage;
   final int totalQuestions;
   final List<Map<String, dynamic>> rawQuestions;
+  final Map<String, Passage> passages;
+  final Map<String, Instruction> instructions;
 
   YearModel({
     required this.year,
     this.hasImage = false,
     this.totalQuestions = 0,
     this.rawQuestions = const [],
+    this.passages = const {},
+    this.instructions = const {},
   });
 
   factory YearModel.fromFirestore(
@@ -155,12 +159,36 @@ class YearModel {
       );
     }
 
+    final Map<String, Passage> parsedPassages = {};
+    if (data['passages'] is List) {
+      for (final pItem in (data['passages'] as List)) {
+        if (pItem is Map) {
+          final pMap = Map<String, dynamic>.from(pItem);
+          final passage = Passage.fromJson(pMap);
+          parsedPassages[passage.id] = passage;
+        }
+      }
+    }
+
+    final Map<String, Instruction> parsedInstructions = {};
+    if (data['instructions'] is List) {
+      for (final iItem in (data['instructions'] as List)) {
+        if (iItem is Map) {
+          final iMap = Map<String, dynamic>.from(iItem);
+          final instruction = Instruction.fromJson(iMap);
+          parsedInstructions[instruction.id] = instruction;
+        }
+      }
+    }
+
     return YearModel(
       year: (data['year'] as num?)?.toInt() ?? int.tryParse(documentId) ?? 0,
       hasImage: data['hasImage'] as bool? ?? false,
       totalQuestions:
           (data['totalQuestions'] as num?)?.toInt() ?? parsedQuestions.length,
       rawQuestions: parsedQuestions,
+      passages: parsedPassages,
+      instructions: parsedInstructions,
     );
   }
 }

@@ -8,27 +8,37 @@ import '../../providers/syllabus_provider.dart';
 import 'syllabus_pdf_viewer.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 
-class SyllabusListScreen extends StatefulWidget {
+class StudyAndSyllabusListScreen extends StatefulWidget {
   final String examType; // e.g., 'jamb_syllabus', 'jamb_brochure', 'waec'
   final String title; // e.g., 'JAMB Syllabus'
 
-  const SyllabusListScreen({
+  const StudyAndSyllabusListScreen({
     super.key,
     required this.examType,
     required this.title,
   });
 
   @override
-  State<SyllabusListScreen> createState() => _SyllabusListScreenState();
+  State<StudyAndSyllabusListScreen> createState() => _StudyAndSyllabusListScreenState();
 }
 
-class _SyllabusListScreenState extends State<SyllabusListScreen> {
+class _StudyAndSyllabusListScreenState extends State<StudyAndSyllabusListScreen> {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyllabusProvider>().fetchSyllabi(widget.examType);
     });
+  }
+
+  void _openPdf(dynamic syllabus) {
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SyllabusPdfViewer(syllabus: syllabus),
+      ),
+    );
   }
 
   @override
@@ -40,73 +50,69 @@ class _SyllabusListScreenState extends State<SyllabusListScreen> {
       body: Stack(
         children: [
           const BlobBackground(),
-
-          // Pull-to-refresh will automatically trigger the Storage sync!
           RefreshIndicator(
-            onRefresh: () =>
-                context.read<SyllabusProvider>().syncFiles(widget.examType),
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                CustomAppBar(
-                  title: widget.title,
-                  subtitle: 'Download and study offline securely.',
-                  isLeading: true,
-                  centerTitle: true,
-                ),
-
-                SliverPadding(
-                  padding: const EdgeInsets.all(16),
-                  sliver: Consumer<SyllabusProvider>(
-                    builder: (context, provider, child) {
-                      if (provider.isLoading) {
-                        return const SliverFillRemaining(
-                          child: Center(child: CustomLoader()),
-                        );
-                      }
-
-                      if (provider.syllabi.isEmpty) {
-                        return SliverFillRemaining(
-                          child: _buildEmptyState(theme),
-                        );
-                      }
-
-                      return SliverList(
-                        delegate: SliverChildBuilderDelegate((context, index) {
-                          final syllabus = provider.syllabi[index];
-                          final progress = provider.getProgressOf(syllabus.id);
-
-                          return _buildPremiumSyllabusCard(
-                            theme: theme,
-                            isDark: isDark,
-                            syllabus: syllabus,
-                            progress: progress,
-                            onTap: () {
-                              if (syllabus.isDownloaded) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        SyllabusPdfViewer(syllabus: syllabus),
-                                  ),
-                                );
-                              } else {
-                                provider.startDownload(syllabus);
-                              }
-                            },
-                          );
-                        }, childCount: provider.syllabi.length),
-                      );
-                    },
+              onRefresh: () =>
+                  context.read<SyllabusProvider>().syncFiles(widget.examType),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  CustomAppBar(
+                    title: widget.title,
+                    subtitle: 'Download and study offline securely.',
+                    isLeading: true,
+                    centerTitle: true,
                   ),
-                ),
-              ],
+
+                  SliverPadding(
+                    padding: const EdgeInsets.all(16),
+                    sliver: Consumer<SyllabusProvider>(
+                      builder: (context, provider, child) {
+                        if (provider.isLoading) {
+                          return const SliverFillRemaining(
+                            child: Center(child: CustomLoader()),
+                          );
+                        }
+
+                        if (provider.syllabi.isEmpty) {
+                          return SliverFillRemaining(
+                            child: _buildEmptyState(theme),
+                          );
+                        }
+
+                        return SliverList(
+                          delegate: SliverChildBuilderDelegate((context, index) {
+                            final syllabus = provider.syllabi[index];
+                            final progress = provider.getProgressOf(syllabus.id);
+
+                            return _buildPremiumSyllabusCard(
+                              theme: theme,
+                              isDark: isDark,
+                              syllabus: syllabus,
+                              progress: progress,
+                              onTap: () {
+                                if (syllabus.isDownloaded) {
+                                  _openPdf(syllabus);
+                                } else {
+                                  provider.startDownload(syllabus, onComplete: () {
+                                    _openPdf(syllabus);
+                                  });
+                                }
+                              },
+                            );
+                          }, childCount: provider.syllabi.length),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
   }
+
+
 
   Widget _buildPremiumSyllabusCard({
     required ThemeData theme,

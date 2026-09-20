@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import '../../../core/config/hive_setup.dart';
@@ -13,13 +14,45 @@ class AnnouncementProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
 
   static const String _hiveKey = 'last_seen_announcement_id';
+  static const String _cachedAnnouncementsKey = 'cached_announcements';
+
+  AnnouncementProvider() {
+    _loadFromCache();
+  }
+
+  void _loadFromCache() {
+    try {
+      final settingsBox = Hive.box(HiveSetup.settingsBoxName);
+      final String? data = settingsBox.get(_cachedAnnouncementsKey);
+      if (data != null && data.isNotEmpty) {
+        final List<dynamic> decoded = json.decode(data);
+        _announcements = decoded
+            .map((item) => AnnouncementModel.fromLocalMap(Map<String, dynamic>.from(item)))
+            .toList();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading cached announcements: $e');
+    }
+  }
 
   Future<void> fetchAnnouncements() async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      _announcements = await _service.getLatestAnnouncements(limit: 100);
+      final freshList = await _service.getLatestAnnouncements(limit: 100);
+      if (freshList.isNotEmpty) {
+        _announcements = freshList;
+        // Save to cache
+        try {
+          final settingsBox = Hive.box(HiveSetup.settingsBoxName);
+          final serialized = freshList.map((ann) => ann.toLocalMap()).toList();
+          await settingsBox.put(_cachedAnnouncementsKey, json.encode(serialized));
+        } catch (e) {
+          debugPrint('Error saving announcements to cache: $e');
+        }
+      }
     } catch (e) {
       debugPrint('Error fetching announcements: $e');
     } finally {

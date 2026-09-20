@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/device_helper.dart';
+import '../../../core/services/backend_api.dart';
 
 class UnlockService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -27,6 +28,9 @@ class UnlockService {
 
   Future<List<String>> fetchInstitutions(String examType) async {
     final normalized = examType.toLowerCase().trim();
+    if (normalized != 'post_utme') {
+      return [normalized];
+    }
     final snapshot = await _firestore
         .collection('questionBank')
         .doc(normalized)
@@ -45,6 +49,14 @@ class UnlockService {
   ) async {
     try {
       final normalized = examType.toLowerCase().trim();
+      if (normalized != 'post_utme') {
+        final displayName = normalized == 'jamb'
+            ? 'JAMB UTME'
+            : normalized.toUpperCase();
+        return {
+          normalized: {'name': displayName, 'logo': null},
+        };
+      }
       final snapshot = await _firestore
           .collection('questionBank')
           .doc(normalized)
@@ -89,6 +101,9 @@ class UnlockService {
     String sectionId,
   ) async {
     final normalized = examType.toLowerCase().trim();
+    if (normalized != 'post_utme') {
+      return fetchSubjects(examType, institutionId);
+    }
     final snapshot = await _firestore
         .collection('questionBank')
         .doc(normalized)
@@ -126,13 +141,22 @@ class UnlockService {
     String institutionId,
   ) async {
     final normalized = examType.toLowerCase().trim();
-    final snapshot = await _firestore
-        .collection('questionBank')
-        .doc(normalized)
-        .collection('institutions')
-        .doc(institutionId.toLowerCase())
-        .collection('subjects')
-        .get();
+    final QuerySnapshot<Map<String, dynamic>> snapshot;
+    if (normalized != 'post_utme') {
+      snapshot = await _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('subjects')
+          .get();
+    } else {
+      snapshot = await _firestore
+          .collection('questionBank')
+          .doc(normalized)
+          .collection('institutions')
+          .doc(institutionId.toLowerCase())
+          .collection('subjects')
+          .get();
+    }
 
     if (snapshot.docs.isEmpty) {
       throw Exception('No subjects found.');
@@ -157,217 +181,33 @@ class UnlockService {
     }).toList();
   }
 
+  /// Activate an exam with a code.
+  ///
+  /// The redemption itself belongs to the backend. It reads the voucher,
+  /// marks it used, records the payment and writes the entitlement with the
+  /// server's own credentials -- so none of those are writes the app needs to
+  /// be allowed to make, and a reader cannot hand themselves an exam by
+  /// writing to their own record.
   Future<void> activateExam({
     required String voucherCode,
-    required String userId,
-    required String examType,
     required String institutionId,
     required List<String> subjects,
-    required String userName,
     String? selectedSectionId,
     String? selectedSectionName,
   }) async {
-    final trimmedCode = voucherCode.trim().toUpperCase();
-    final normalizedExamType = examType.toLowerCase().trim();
     final normalizedSubjects = subjects
         .map((s) => s.toLowerCase().trim())
+        .where((s) => s.isNotEmpty)
         .toSet()
         .toList();
 
-    final deviceId = await DeviceHelper.getDeviceId();
-
-    final voucherRef = _firestore.collection('vouchers').doc(trimmedCode);
-    final userRef = _firestore.collection('users').doc(userId);
-
-    // Use a unique key for the institution/section (e.g., oau_science)
-    final String institutionKey =
-        (selectedSectionId != null && selectedSectionId.isNotEmpty)
-        ? "${institutionId.toLowerCase()}_${selectedSectionId.toLowerCase()}"
-        : institutionId.toLowerCase();
-
-    // ------------------------------------------------------------------
-    // Calculate Expiration Date (Current Date + 10 Months)
-    // ------------------------------------------------------------------
-    final now = DateTime.now();
-    // Dart's DateTime automatically handles year overflow
-    final expirationDate = DateTime(now.year, now.month + 10, now.day);
-
-    await _firestore.runTransaction((transaction) async {
-      // ------------------------------------------------------------------
-      // STEP 1: Check if the user already has an active subscription for this
-      // ------------------------------------------------------------------
-      final userSnap = await transaction.get(userRef);
-      if (userSnap.exists) {
-        final userData = userSnap.data() ?? {};
-        final packages =
-            userData['examPackages'] as Map<String, dynamic>? ?? {};
-
-        if (packages.containsKey(institutionKey)) {
-          final existingPackage =
-              packages[institutionKey] as Map<String, dynamic>;
-          if (existingPackage['expiresAt'] != null) {
-            final expiresAt = (existingPackage['expiresAt'] as Timestamp)
-                .toDate();
-            if (expiresAt.isAfter(DateTime.now())) {
-              throw Exception(
-                'You already have an active subscription for this section that has not expired yet.',
-              );
-            }
-          }
-        }
-      }
-
-      // ------------------------------------------------------------------
-      // STEP 2: Validate the Voucher Code
-      // ------------------------------------------------------------------
-      final voucherSnap = await transaction.get(voucherRef);
-      if (!voucherSnap.exists) {
-        throw Exception('Invalid activation code.');
-      }
-
-      final voucherData = voucherSnap.data() ?? {};
-      final voucherStatus = (voucherData['status'] ?? '')
-          .toString()
-          .toLowerCase();
-
-      if (voucherStatus == 'used') {
-        throw Exception('Activation code already used.');
-      }
-
-      final voucherExamType = (voucherData['examType'] ?? '')
-          .toString()
-          .toLowerCase()
-          .trim();
-      if (voucherExamType.isEmpty || voucherExamType != normalizedExamType) {
-        throw Exception('Voucher exam type does not match this activation.');
-      }
-
-      // Fetch sub-admin details for referral if applicable (MUST BE DONE BEFORE WRITES)
-      final String? createdBySubAdmin = (voucherData['subAdminId'] ?? voucherData['createdBy']) as String?;
-      String? centerName;
-      if (createdBySubAdmin != null && createdBySubAdmin.isNotEmpty) {
-        final adminDoc = await transaction.get(
-          _firestore.collection('admins').doc(createdBySubAdmin),
-        );
-        if (adminDoc.exists) {
-          final data = adminDoc.data()!;
-          centerName =
-              data['schoolCenterName'] ?? data['name'] ?? 'Admin Center';
-        }
-      }
-
-      // ------------------------------------------------------------------
-      // STEP 3: Fetch all required transaction reads before any writes
-      // ------------------------------------------------------------------
-      final String? paymentReference = voucherData['paymentReference'] as String?;
-      DocumentSnapshot<Map<String, dynamic>>? txDoc;
-      bool isOwnPurchase = false;
-
-      if (paymentReference != null && paymentReference.isNotEmpty) {
-        txDoc = await transaction.get(
-          _firestore.collection('payment_transactions').doc(paymentReference),
-        );
-        if (txDoc.exists) {
-          final txData = txDoc.data()!;
-          if (txData['uid'] == userId) {
-            isOwnPurchase = true;
-          }
-        }
-      }
-
-      // ------------------------------------------------------------------
-      // STEP 4: Apply the updates securely within the transaction (writes)
-      // ------------------------------------------------------------------
-      // Mark voucher as used
-      transaction.update(voucherRef, {
-        'status': 'used',
-        'isUsed': true,
-        'usedByUid': userId,
-        'usedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      if (isOwnPurchase && txDoc != null) {
-        transaction.update(txDoc.reference, {
-          'status': 'used',
-          'voucherCode': voucherCode,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        // Only create a new used transaction record if this isn't the student's own purchase
-        // (e.g., admin-generated codes or sub-admin bulk codes).
-        final redemptionRef = _firestore.collection('payment_transactions').doc();
-        transaction.set(redemptionRef, {
-          'uid': userId,
-          'examType': voucherExamType,
-          'amount': voucherData['price'] ?? 0,
-          'paymentMethod': 'voucher_redeemed',
-          'status': 'used',
-          'voucherCode': voucherCode,
-          'subAdminUid': createdBySubAdmin ?? voucherData['generatedByAdminUid'] ?? voucherData['adminId'],
-          if (paymentReference != null && paymentReference.isNotEmpty)
-            'parentPaymentReference': paymentReference,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      // Save the Package Info with the `expiresAt` timestamp
-      final Map<String, dynamic> packageInfo = {
-        'accessType': 'premium',
-        'examType': normalizedExamType,
-        'institutionId': institutionId.toLowerCase(),
-        'sectionId': selectedSectionId ?? '',
-        'sectionName': selectedSectionName ?? '',
-        'voucherCode': trimmedCode,
-        'activatedAt': FieldValue.serverTimestamp(),
-        'lastSyncedAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(
-          expirationDate,
-        ), // <-- NEW 10 MONTH EXPIRATION
-        'initialSubjectsFallback': normalizedSubjects,
-      };
-
-      final Map<String, dynamic> userUpdate = {
-        'isPremium': true,
-        'deviceId': deviceId,
-        'activatedCodes': FieldValue.arrayUnion([trimmedCode]),
-        'examPackages': {institutionKey: packageInfo},
-        'examSelections': {
-          normalizedExamType: {
-            'deviceId': deviceId,
-            'institutions': {institutionKey: packageInfo},
-          },
-        },
-      };
-
-      if (createdBySubAdmin != null && createdBySubAdmin.isNotEmpty) {
-        userUpdate['referredBy'] = createdBySubAdmin;
-        if (centerName != null) {
-          userUpdate['schoolStatus'] = centerName;
-        }
-        userUpdate['referredCenters.$createdBySubAdmin'] = centerName ?? 'Admin Center';
-        userUpdate['referredAdminsList'] = FieldValue.arrayUnion([createdBySubAdmin]);
-      }
-
-      transaction.set(userRef, userUpdate, SetOptions(merge: true));
+    await BackendApi.post('vouchers/redeem', {
+      'code': voucherCode.trim().toUpperCase(),
+      'institutionId': institutionId.toLowerCase().trim(),
+      'sectionId': selectedSectionId ?? '',
+      'sectionName': selectedSectionName ?? '',
+      'subjects': normalizedSubjects,
+      'deviceId': await DeviceHelper.getDeviceId(),
     });
-
-    // Audit log (fire-and-forget)
-    try {
-      await _firestore.collection('audit_logs').doc().set({
-        'uid': userId,
-        'userName': userName,
-        'action': 'unlock_code',
-        'timestamp': FieldValue.serverTimestamp(),
-        'details': {
-          'voucherCode': trimmedCode,
-          'examType': normalizedExamType,
-          'institutionId': institutionId,
-          'institutionKey': institutionKey,
-          'expiresAt': Timestamp.fromDate(expirationDate),
-        },
-      });
-    } catch (_) {}
   }
 }

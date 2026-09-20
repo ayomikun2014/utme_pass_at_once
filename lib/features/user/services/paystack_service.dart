@@ -1,9 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:utme_pass_at_once/core/config/env.dart';
 
+import '../../../core/services/backend_api.dart';
+
+/// Paystack checkout, through the backend (payments/initialize and
+/// payments/verify). The secret key never reaches the app.
 class PaystackService {
   PaystackService._();
 
@@ -17,24 +17,13 @@ class PaystackService {
     String? name,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(Env.paystackInitializeUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': email,
-          'amount': amount,
-          'examType': examType,
-          'uid': uid,
-          'name': name,
-        }),
-      );
-
-      final Map<String, dynamic> data =
-      jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode != 200 || data['status'] != true) {
-        throw Exception(data['message'] ?? 'Failed to initialize transaction.');
-      }
+      final data = await BackendApi.post('payments/initialize', {
+        'email': email,
+        'amount': amount,
+        'examType': examType,
+        'uid': uid,
+        'name': name,
+      });
 
       if (data['authorization_url'] == null || data['reference'] == null) {
         throw Exception('Invalid payment initialization response.');
@@ -43,6 +32,7 @@ class PaystackService {
       return data;
     } catch (e) {
       debugPrint('❌ Error initializing transaction: $e');
+      if (e is BackendException) throw Exception(e.message);
       rethrow;
     }
   }
@@ -51,56 +41,10 @@ class PaystackService {
     required String reference,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse(Env.paystackVerifyUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'reference': reference,
-        }),
-      );
-
-      final Map<String, dynamic> data =
-      jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode != 200 || data['status'] != true) {
-        throw Exception(data['message'] ?? 'Failed to verify transaction.');
-      }
-
-      return data;
+      return await BackendApi.post('payments/verify', {'reference': reference});
     } catch (e) {
       debugPrint('❌ Error verifying transaction: $e');
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> recordVoucherUsage({
-    required String voucherCode,
-    required String uid,
-    String? email,
-    String? userName,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse(Env.paystackRecordVoucherUsageUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'voucherCode': voucherCode,
-          'uid': uid,
-          'email': email,
-          'userName': userName,
-        }),
-      );
-
-      final Map<String, dynamic> data =
-      jsonDecode(response.body) as Map<String, dynamic>;
-
-      if (response.statusCode != 200 || data['status'] != true) {
-        throw Exception(data['message'] ?? 'Failed to record voucher usage.');
-      }
-
-      return data;
-    } catch (e) {
-      debugPrint('❌ Error recording voucher usage: $e');
+      if (e is BackendException) throw Exception(e.message);
       rethrow;
     }
   }

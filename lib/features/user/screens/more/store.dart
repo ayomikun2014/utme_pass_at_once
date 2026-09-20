@@ -23,9 +23,9 @@ class Store extends StatelessWidget {
             slivers: [
               const CustomAppBar(
                 icon: null,
-                title: 'Store',
+                title: 'Buy Activation Code',
                 subtitle:
-                'Unlock premium bundles, past questions, and study materials to guarantee your success.',
+                'Buy all exam codes here to unlock past questions and study materials.',
                 isLeading: true,
               ),
               _buildStoreCard(context),
@@ -140,16 +140,31 @@ class Store extends StatelessWidget {
                     item.title,
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
-                      fontSize: 18,
+                      fontSize: 14,
                       height: 1.1,
                       // FIXED: Using theme.colorScheme.onSurface for dynamic text
                       color: isSoon
                           ? Colors.grey
                           : theme.colorScheme.onSurface,
                     ),
-                    maxLines: 3,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (item.subtitle != null && item.subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      item.subtitle!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: isSoon
+                            ? Colors.grey.shade400
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(

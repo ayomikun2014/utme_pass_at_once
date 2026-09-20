@@ -184,7 +184,8 @@ class PurchaseModel {
       status == 'approved' ||
       status == 'success' ||
       status == 'completed';
-  bool get isPaymentFailed => status == 'failed';
+  bool get isPaymentFailed => status == 'failed' || isCancelled;
+  bool get isCancelled => status == 'cancelled';
   bool get isUsed => status == 'used';
 
   bool get isPending =>
@@ -203,6 +204,11 @@ class PurchaseModel {
 
   bool get showPendingMessage => isPending;
 
+  /// A payment still waiting on the buyer or on an admin can be called off, so
+  /// the buyer is free to start a fresh one. Once a code exists there is
+  /// nothing to cancel.
+  bool get canCancel => isPending && !hasVoucher && !isUsed && !isCancelled;
+
   bool get showFailureMessage =>
       isPaymentFailed ||
           status == 'code_generation_failed' ||
@@ -210,6 +216,9 @@ class PurchaseModel {
           (errorMessage != null && errorMessage!.trim().isNotEmpty);
 
   String get effectiveMessage {
+    if (isCancelled) {
+      return 'You cancelled this payment. You can start a new one whenever you are ready.';
+    }
     if (failureReason != null && failureReason!.trim().isNotEmpty) {
       return failureReason!;
     }
@@ -235,6 +244,7 @@ class PurchaseModel {
   }
 
   String get statusLabel {
+    if (isCancelled) return 'Cancelled';
     if (isUsed) return 'Used';
     if (isVoucherGenerated) return 'Code Ready';
     if (isVerified && !hasVoucher) return 'Generating Code';

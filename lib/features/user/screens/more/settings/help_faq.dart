@@ -88,35 +88,35 @@ class HelpAndFaq extends StatelessWidget {
                         context,
                         'How do I pay for an exam package using online payments?',
                         'To generate an Activation Code via Paystack:\n\n'
-                            '• Open the Store from the Home screen or from the More tab.\n'
+                            '• Open Buy Activation Code from the Home screen or from the More tab.\n'
                             '• Select your target Exam Type (UTME, Post-UTME, NECO, or WAEC).\n'
                             '• Read the description text and select the Pay Online (Paystack) payment method.\n'
                             '• The app will direct you to the Paystack secure gateway where you can choose Card, USSD, or Bank Transfer.\n'
                             '• Once payment is completed successfully, the app will generate your unique Activation Code and display it on the screen for you to copy.\n'
-                            '• A corresponding purchase order is also registered in your purchase history.\n\n'
+                            '• A corresponding purchase order is also registered in your order history.\n\n'
                             'Note: Payment does not activate premium. You must use the generated Activation Code to unlock your exam package (see "How do I unlock and activate my exam package?").\n\n'
-                            'Please note: If the payment succeeds but the screen closes before you copy the code, go to My Purchases on the Home screen or in the Account section to find and copy your generated activation PIN.',
+                            'Please note: If the payment succeeds but the screen closes before you copy the code, go to My Orders on the Home screen or in the Account section to find and copy your generated activation PIN.',
                       ),
 
                       _buildFaqTile(
                         context,
                         'How do I submit a manual bank transfer?',
                         'To pay via direct bank transfer and receive an Activation Code:\n\n'
-                            '• Open the Store from the Home screen or from the More tab.\n'
+                            '• Open Buy Activation Code from the Home screen or from the More tab.\n'
                             '• Select the Exam Type (UTME, Post-UTME, NECO, or WAEC) you want to purchase.\n'
                             '• Read the description text and select the Manual Payment option.\n'
                             '• Pay the exact amount to the bank details shown on the screen and take a screenshot of the receipt.\n'
                             '• In the payment screen, upload your proof of payment screenshot and submit.\n'
-                            '• The transaction order will instantly show in your purchase history as pending.\n\n'
-                            'Note: Payment does not activate premium. Once the admin approves your transaction, an Activation Code is generated and will appear in your purchase history. Use that code to unlock your exam package.\n\n'
-                            'Please note: Manual payments require admin verification. Check your purchase history periodically for your activation code after submitting the transfer proof.',
+                            '• The transaction order will instantly show in your order history as pending.\n\n'
+                            'Note: Payment does not activate premium. Once the admin approves your transaction, an Activation Code is generated and will appear in your order history. Use that code to unlock your exam package.\n\n'
+                            'Please note: Manual payments require admin verification. Check your order history periodically for your activation code after submitting the transfer proof.',
                       ),
 
                       _buildFaqTile(
                         context,
                         'How do I force-refresh my premium status?',
                         'If you have already unlocked and activated an exam package but premium features still appear locked:\n\n'
-                            '• Tap the More tab on the bottom navigation bar and select My Account or Store.\n'
+                            '• Tap the More tab on the bottom navigation bar and select My Account or Buy Activation Code.\n'
                             '• Locate the Refresh Status button (or pull down to refresh on the home dashboard).\n'
                             '• The app will check the server for your latest subscription status and update your app accordingly.\n\n'
                             'Note: Premium is only granted after you successfully unlock an exam using your Activation Code (not at the point of payment).\n\n'
@@ -127,7 +127,7 @@ class HelpAndFaq extends StatelessWidget {
                         context,
                         'How do I unlock and activate my exam package?',
                         'Once you have your Activation Code (from an online Paystack purchase, manual bank transfer approval, or a center voucher), you can activate it to unlock premium:\n\n'
-                            '• Go to the Home screen and tap the Unlock Now button, or go to My Purchases in the Home screen or Account section and tap Unlock Now next to the order.\n'
+                            '• Go to the Home screen and tap the Unlock Now button, or go to My Orders in the Home screen or Account section and tap Unlock Now next to the order.\n'
                             '• Enter your Activation Code/PIN and tap Verify.\n'
                             '• After verification, the app will show the exam category (JAMB, Post-UTME, NECO, or WAEC) linked to your code. Tap Next to continue.\n'
                             '• Select the target Institution you want to bind to (for example, OAU or UI).\n'

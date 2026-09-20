@@ -17,29 +17,18 @@ class NewsReaderScreen extends StatefulWidget {
 }
 
 class _NewsReaderScreenState extends State<NewsReaderScreen> {
-  late final WebViewController _controller;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialize WebViewController only if fullContent is null or empty
-    if (widget.news.fullContent == null || widget.news.fullContent!.isEmpty) {
-      _controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..setNavigationDelegate(
-          NavigationDelegate(
-            onPageFinished: (String url) {
-              if (mounted) {
-                setState(() => _isLoading = false);
-              }
-            },
-          ),
-        )
-        ..loadRequest(Uri.parse(widget.news.link));
-    } else {
-      _isLoading = false;
-    }
+  /// Open the publisher's own page, inside the app.
+  void _openPublisher() {
+    if (widget.news.link.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _PublisherPage(
+          url: widget.news.link,
+          source: widget.news.source,
+        ),
+      ),
+    );
   }
 
   Future<void> _launchSourceUrl() async {
@@ -65,12 +54,10 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool useNativeReader = widget.news.fullContent != null && widget.news.fullContent!.isNotEmpty;
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          useNativeReader ? 'Education News' : widget.news.source,
+          'Education News',
           style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -78,22 +65,14 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
             icon: const Icon(Icons.share_outlined),
             onPressed: _shareArticle,
           ),
-          if (useNativeReader)
-            IconButton(
-              icon: const Icon(Icons.open_in_browser),
-              onPressed: _launchSourceUrl,
-            ),
+          IconButton(
+            icon: const Icon(Icons.open_in_browser),
+            onPressed: _launchSourceUrl,
+            tooltip: 'Open in your browser',
+          ),
         ],
       ),
-      body: useNativeReader
-          ? _buildNativeReader(context)
-          : Stack(
-              children: [
-                WebViewWidget(controller: _controller),
-                if (_isLoading)
-                  const Center(child: CustomLoader()),
-              ],
-            ),
+      body: _buildNativeReader(context),
     );
   }
 
@@ -101,12 +80,14 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
     final theme = Theme.of(context);
     final isDarkMode = theme.brightness == Brightness.dark;
     
-    // Process paragraphs
-    final paragraphs = widget.news.fullContent!
-        .split('\n')
+    // The story as far as it goes: the article when the feed gives one, the
+    // publisher's summary otherwise.
+    final paragraphs = widget.news.body
+        .split(RegExp(r'\n+'))
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList();
+    final isSummary = !widget.news.hasFullStory;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -210,6 +191,29 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                if (isSummary) ...[
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.summarize_rounded,
+                        size: 15,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'In brief',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                ],
+
                 // Body Paragraphs
                 ...paragraphs.map((para) => Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
@@ -238,7 +242,11 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
                   child: Column(
                     children: [
                       Text(
-                        'This article was originally published on ${widget.news.source}. To read the fully formatted version with images or comments, view the original source.',
+                        isSummary
+                            ? 'That is the summary ${widget.news.source} published. Read the '
+                                'rest of the story on their site -- it opens here in the app.'
+                            : 'This article was first published by ${widget.news.source}. '
+                                'Their page has the pictures and comments.',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.inter(
                           fontSize: 13,
@@ -250,19 +258,30 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
                       SizedBox(
                         width: double.infinity,
                         height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: _launchSourceUrl,
-                          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                        child: ElevatedButton.icon(
+                          onPressed: _openPublisher,
+                          icon: const Icon(Icons.menu_book_rounded, size: 18),
                           label: Text(
-                            'View Original Source',
+                            isSummary ? 'Read the full story' : 'Open the original page',
                             style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
                           ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: theme.colorScheme.primary),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _launchSourceUrl,
+                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                        label: Text(
+                          'Open in my browser',
+                          style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -272,6 +291,70 @@ class _NewsReaderScreenState extends State<NewsReaderScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The publisher's own page, shown inside the app.
+class _PublisherPage extends StatefulWidget {
+  const _PublisherPage({required this.url, required this.source});
+
+  final String url;
+  final String source;
+
+  @override
+  State<_PublisherPage> createState() => _PublisherPageState();
+}
+
+class _PublisherPageState extends State<_PublisherPage> {
+  late final WebViewController _controller;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (mounted) setState(() => _isLoading = false);
+          },
+          onWebResourceError: (_) {
+            if (mounted) setState(() => _isLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.source,
+          style: GoogleFonts.outfit(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Open in my browser',
+            icon: const Icon(Icons.open_in_browser),
+            onPressed: () async {
+              final uri = Uri.parse(widget.url);
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading) const Center(child: CustomLoader()),
         ],
       ),
     );

@@ -1,9 +1,11 @@
+import 'dart:math' as math;
 import 'package:utme_pass_at_once/core/utils/custom_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:utme_pass_at_once/core/utils/custom_loader.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:utme_pass_at_once/features/user/services/manual_payment_service.dart';
 import 'package:utme_pass_at_once/core/utils/contact_helper.dart';
 import 'package:utme_pass_at_once/features/user/models/store_item.dart';
 
@@ -36,14 +38,22 @@ class _ManualPaymentState extends State<ManualPayment> {
 
   Future<void> _pickImage() async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      // Shrunk as it is picked: plenty to read a bank slip, and quick to
+      // upload on a slow connection.
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1400,
+        maxHeight: 1400,
+        imageQuality: 60,
+      );
       if (image != null) {
         final bytes = await image.readAsBytes();
-        if (bytes.length > 5 * 1024 * 1024) {
+        if (bytes.length > ManualPaymentService.maxUploadBytes) {
           if (mounted) {
             CustomToast.show(
-              context, 
-              "Selected image is too large. Please select a receipt image under 5MB.",
+              context,
+              'That receipt is still too large to send. Please crop it, or take a '
+              'clearer photo of just the receipt.',
               isError: true,
             );
           }
@@ -243,7 +253,9 @@ class _ManualPaymentState extends State<ManualPayment> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : baseColor.withValues(alpha: 0.05),
+        color: isDark
+            ? AppColors.surfaceDark
+            : baseColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isDark
@@ -323,11 +335,7 @@ class _ManualPaymentState extends State<ManualPayment> {
                   Clipboard.setData(ClipboardData(text: accountNumber));
                   CustomToast.show(context, "Account number copied!");
                 },
-                icon: Icon(
-                  Icons.copy_rounded,
-                  size: 16,
-                  color: baseColor,
-                ),
+                icon: Icon(Icons.copy_rounded, size: 16, color: baseColor),
                 label: Text(
                   "Copy",
                   style: TextStyle(
@@ -367,11 +375,7 @@ class _ManualPaymentState extends State<ManualPayment> {
           ),
           child: Column(
             children: [
-              Icon(
-                Icons.cloud_upload_outlined,
-                size: 40,
-                color: baseColor,
-              ),
+              Icon(Icons.cloud_upload_outlined, size: 40, color: baseColor),
               const SizedBox(height: 12),
               Text(
                 "Tap to upload receipt image",
@@ -382,9 +386,7 @@ class _ManualPaymentState extends State<ManualPayment> {
               const SizedBox(height: 4),
               Text(
                 "Supports JPG, PNG (Max 5MB)",
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.grey,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey),
               ),
             ],
           ),
@@ -469,7 +471,7 @@ class _ManualPaymentState extends State<ManualPayment> {
         20,
         16,
         20,
-        MediaQuery.of(context).padding.bottom + 16,
+        math.max(24.0, MediaQuery.of(context).padding.bottom + 16.0),
       ),
       decoration: BoxDecoration(
         color: isDark ? AppColors.backgroundDark : theme.colorScheme.surface,
@@ -509,10 +511,11 @@ class _ManualPaymentState extends State<ManualPayment> {
           ),
           const SizedBox(height: 16),
           CustomBtn(
-            label: isProcessing
-                ? "Processing..."
-                : "Submit",
-            onPressed: _hasReadInstructions && _proofImageBytes != null && !isProcessing
+            label: isProcessing ? "Processing..." : "Submit",
+            onPressed:
+                _hasReadInstructions &&
+                    _proofImageBytes != null &&
+                    !isProcessing
                 ? () async {
                     final auth = context.read<AuthProvider>();
                     final user = auth.currentUser;
@@ -524,18 +527,19 @@ class _ManualPaymentState extends State<ManualPayment> {
                     String ext = _proofImageFile?.name.split('.').last ?? 'jpg';
 
                     if (!context.mounted) return;
-                    final manualPaymentProvider = context.read<ManualPaymentProvider>();
+                    final manualPaymentProvider = context
+                        .read<ManualPaymentProvider>();
 
                     // 3. Submit Payment
                     final success = await manualPaymentProvider.submitPayment(
-                          uid: user.uid,
-                          email: user.email,
-                          userName: user.displayName,
-                          amount: item.price,
-                          examType: item.id,
-                          imageBytes: _proofImageBytes!,
-                          imageExtension: ext,
-                        );
+                      uid: user.uid,
+                      email: user.email,
+                      userName: user.displayName,
+                      amount: item.price,
+                      examType: item.id,
+                      imageBytes: _proofImageBytes!,
+                      imageExtension: ext,
+                    );
 
                     if (!context.mounted) return;
 
@@ -545,9 +549,10 @@ class _ManualPaymentState extends State<ManualPayment> {
                         user.uid,
                       );
 
-                      CustomToast.show(context, 
-                            'Payment submitted successfully! Waiting for admin approval.',
-                          );
+                      CustomToast.show(
+                        context,
+                        'Payment submitted successfully! Waiting for admin approval.',
+                      );
 
                       Navigator.of(context).pop();
                       Navigator.of(context).pushReplacementNamed('/purchase');

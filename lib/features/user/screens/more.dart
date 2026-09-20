@@ -48,6 +48,7 @@ class More extends StatelessWidget {
               child: FadeInAnimation(
                 child: CustomGridCard(
                   title: feature.title,
+                  subtitle: feature.subtitle,
                   route: feature.route,
                   baseColor: feature.baseColor,
                   icon: feature.icon,

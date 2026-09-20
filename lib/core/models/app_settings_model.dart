@@ -92,6 +92,15 @@ class AppSettingsModel {
   final int necoPrice;
   final int postUtmePrice;
 
+  // ── What the store may sell
+  // Which simulators the store offers used to be written into this app, so
+  // putting a new exam on sale meant a new build on the Play Store. The admin
+  // panel owns these now and the store reads them live.
+  final bool jambOnSale;
+  final bool waecOnSale;
+  final bool necoOnSale;
+  final bool postUtmeOnSale;
+
   // ── Bank
   final List<BankDetail> bankDetails;
 
@@ -107,13 +116,19 @@ class AppSettingsModel {
 
   final DateTime? updatedAt;
 
+  // ── Backend address (optional; the app has built-in defaults)
+  final String? backendBaseUrl;
+  final String? supabaseUrl;
+
   const AppSettingsModel({
+    this.backendBaseUrl,
+    this.supabaseUrl,
     required this.maintenanceMode,
     required this.paymentGatewayEnabled, // Added
-    required this.latestAppVersion,      // Renamed
+    required this.latestAppVersion, // Renamed
     required this.minAppVersion,
     required this.forceUpdate,
-    required this.showUpdatePrompt,      // Added
+    required this.showUpdatePrompt, // Added
     required this.updateTitle,
     required this.updateMessage,
     required this.androidUpdateUrl,
@@ -122,6 +137,10 @@ class AppSettingsModel {
     required this.waecPrice,
     required this.necoPrice,
     required this.postUtmePrice,
+    required this.jambOnSale,
+    required this.waecOnSale,
+    required this.necoOnSale,
+    required this.postUtmeOnSale,
     required this.bankDetails,
     required this.contactEmail,
     required this.supportPhones,
@@ -144,13 +163,17 @@ class AppSettingsModel {
     showUpdatePrompt: true, // Default to true
     updateTitle: 'New Update Available',
     updateMessage:
-    'Please update your app to continue enjoying the latest features.',
+        'Please update your app to continue enjoying the latest features.',
     androidUpdateUrl: '',
     iosUpdateUrl: '',
     jambPrice: 3000,
     waecPrice: 3000,
     necoPrice: 3000,
     postUtmePrice: 3500,
+    jambOnSale: true,
+    waecOnSale: false,
+    necoOnSale: false,
+    postUtmeOnSale: true,
     bankDetails: [],
     contactEmail: '',
     supportPhones: [],
@@ -168,6 +191,8 @@ class AppSettingsModel {
     final phoneList = map['supportPhones'];
 
     return AppSettingsModel(
+      backendBaseUrl: map['backendBaseUrl'] as String?,
+      supabaseUrl: map['supabaseUrl'] as String?,
       maintenanceMode: (map['maintenanceMode'] as bool?) ?? false,
 
       // Syncs with Admin Kill-Switch
@@ -181,7 +206,7 @@ class AppSettingsModel {
 
       updateTitle: (map['updateTitle'] as String?) ?? 'New Update Available',
       updateMessage:
-      (map['updateMessage'] as String?) ??
+          (map['updateMessage'] as String?) ??
           'Please update your app to continue enjoying the latest features.',
 
       androidUpdateUrl: (map['androidUpdateUrl'] as String?) ?? '',
@@ -191,21 +216,27 @@ class AppSettingsModel {
       waecPrice: (map['waecPrice'] as num?)?.toInt() ?? 3000,
       necoPrice: (map['necoPrice'] as num?)?.toInt() ?? 3000,
       postUtmePrice: (map['postUtmePrice'] as num?)?.toInt() ?? 3500,
+      // Missing until an admin saves pricing once, so the fallbacks are what
+      // this app shipped with: JAMB and Post-UTME on sale, WAEC and NECO not.
+      jambOnSale: (map['jambOnSale'] as bool?) ?? true,
+      waecOnSale: (map['waecOnSale'] as bool?) ?? false,
+      necoOnSale: (map['necoOnSale'] as bool?) ?? false,
+      postUtmeOnSale: (map['postUtmeOnSale'] as bool?) ?? true,
 
       bankDetails: bankList is List
           ? bankList
-          .whereType<Map<String, dynamic>>() // Safer casting
-          .map((e) => BankDetail.fromMap(e))
-          .toList()
+                .whereType<Map<String, dynamic>>() // Safer casting
+                .map((e) => BankDetail.fromMap(e))
+                .toList()
           : [],
 
       contactEmail: (map['contactEmail'] as String?) ?? '',
 
       supportPhones: phoneList is List
           ? phoneList
-          .whereType<Map<String, dynamic>>() // Safer casting
-          .map((e) => PhoneDetail.fromMap(e))
-          .toList()
+                .whereType<Map<String, dynamic>>() // Safer casting
+                .map((e) => PhoneDetail.fromMap(e))
+                .toList()
           : [],
 
       whatsappNumber: (map['whatsappNumber'] as String?) ?? '',

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../../../core/constants/app_colors.dart';
 import '../../../../../core/utils/bg.dart';
 import '../../../../../core/utils/custom_app_bar.dart';
 import '../../../../../routes.dart';
+import '../../../../../core/utils/custom_toast.dart';
 import '../../../models/notification_model.dart';
 import 'package:utme_pass_at_once/features/user/utils/rich_text_link_renderer.dart';
 
@@ -39,7 +41,8 @@ class NotificationDetailsScreen extends StatelessWidget {
     final payload = notification?.payload ??
         (notificationData?['payload'] != null ? Map<String, dynamic>.from(notificationData!['payload']) : null);
 
-    final resolvedRoute = payload?['route'] as String? ?? _getRouteFromType(type);
+    final voucherCode = _findVoucherCode(payload, body);
+    final resolvedRoute = _resolveRoute(payload?['route'] as String?, type, voucherCode);
     final showActionBtn = resolvedRoute != null && resolvedRoute.isNotEmpty;
 
     return Scaffold(
@@ -155,6 +158,10 @@ class NotificationDetailsScreen extends StatelessWidget {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
+                          if (voucherCode != null) ...[
+                            const SizedBox(height: 20),
+                            _VoucherCodeCard(code: voucherCode, isDark: isDark),
+                          ],
                           const SizedBox(height: 32),
 
                           // Call to Action Button if there is a target route
@@ -173,16 +180,34 @@ class NotificationDetailsScreen extends StatelessWidget {
                                   ),
                                 ),
                                 onPressed: () {
-                                  // Navigate to target route
+                                  // Going to unlock? Carry the code across
+                                  // so it only has to be pasted.
+                                  if (voucherCode != null &&
+                                      resolvedRoute == AppRoutes.unlock) {
+                                    Clipboard.setData(
+                                      ClipboardData(text: voucherCode),
+                                    );
+                                    CustomToast.show(
+                                      context,
+                                      'Code copied. Paste it to unlock.',
+                                    );
+                                  }
                                   Navigator.pushNamed(
                                     context,
                                     resolvedRoute,
                                     arguments: payload,
                                   );
                                 },
-                                icon: Icon(_getActionIcon(type), size: 18),
+                                icon: Icon(
+                                  resolvedRoute == AppRoutes.unlock
+                                      ? Icons.lock_open_rounded
+                                      : _getActionIcon(type),
+                                  size: 18,
+                                ),
                                 label: Text(
-                                  _getActionLabel(type),
+                                  resolvedRoute == AppRoutes.unlock
+                                      ? 'Unlock Now'
+                                      : _getActionLabel(type),
                                   style: GoogleFonts.plusJakartaSans(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w700,
@@ -207,7 +232,53 @@ class NotificationDetailsScreen extends StatelessWidget {
 
   // --- Helper Methods ---
 
-  String? _getRouteFromType(String type) {
+  /// An activation code out of the notification: the payload carries it, and
+  /// older ones only mention it in the message.
+  static String? _findVoucherCode(Map<String, dynamic>? payload, String body) {
+    final fromPayload =
+        (payload?['voucherCode'] ?? payload?['code'])?.toString().trim();
+    final candidate = (fromPayload != null && fromPayload.isNotEmpty)
+        ? fromPayload
+        : RegExp(r'\b[A-Z]{3}-[A-Z0-9]{4}-[A-Z0-9]{4}\b').firstMatch(body)?.group(0);
+    if (candidate == null || candidate.isEmpty) return null;
+    // A bulk purchase lists several; the first is the one to unlock with.
+    return candidate.split(',').first.trim();
+  }
+
+  /// Where the button goes.
+  ///
+  /// A route written into the notification is followed only if this app has
+  /// it. The admin panel used to send '/my_purchase', which does not exist
+  /// here and landed readers on the "page not found" screen; anything unknown
+  /// now falls back to the route for the notification's type, and a
+  /// notification carrying a code goes straight to the unlock screen.
+  static String? _resolveRoute(
+    String? fromPayload,
+    String type,
+    String? voucherCode,
+  ) {
+    const legacy = <String, String>{
+      '/my_purchase': AppRoutes.purchase,
+      '/purchases': AppRoutes.purchase,
+      '/my_orders': AppRoutes.purchase,
+      '/notifications': AppRoutes.notificationHistory,
+      '/home': AppRoutes.mainShell,
+    };
+
+    final known = AppRoutes.staticRoutes.keys.toSet();
+    String? route = fromPayload?.trim();
+    if (route != null && route.isNotEmpty && !known.contains(route)) {
+      route = legacy[route];
+    }
+    route ??= _getRouteFromType(type);
+    if (voucherCode != null && (route == null || route == AppRoutes.purchase)) {
+      route = AppRoutes.unlock;
+    }
+    if (route != null && !known.contains(route)) return null;
+    return route;
+  }
+
+  static String? _getRouteFromType(String type) {
     switch (type) {
       case 'payment':
       case 'payment_rejected':
@@ -340,5 +411,66 @@ class NotificationDetailsScreen extends StatelessWidget {
       default:
         return 'Proceed to Feature';
     }
+  }
+}
+
+
+/// The activation code, with a copy button beside it.
+class _VoucherCodeCard extends StatelessWidget {
+  const _VoucherCodeCard({required this.code, required this.isDark});
+
+  final String code;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: isDark ? 0.18 : 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ACTIVATION CODE',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                SelectableText(
+                  code,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy_rounded, size: 20),
+            color: AppColors.primary,
+            tooltip: 'Copy code',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: code));
+              CustomToast.show(context, 'Code copied to clipboard!');
+            },
+          ),
+        ],
+      ),
+    );
   }
 }

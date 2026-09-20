@@ -4,6 +4,7 @@ import '../../auth/providers/auth_provider.dart';
 import '../services/unlock_service.dart';
 import '../../../core/services/network_service.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UnlockProvider extends ChangeNotifier {
   final UnlockService _service = UnlockService();
@@ -62,6 +63,10 @@ class UnlockProvider extends ChangeNotifier {
 
     if (lowerType == 'waec' || lowerType == 'neco') {
       return _selectedSubjects.isNotEmpty && _selectedSubjects.length <= 9;
+    }
+
+    if (lowerType == 'jamb') {
+      return _selectedSubjects.length == 4;
     }
 
     return _selectedSubjects.isNotEmpty && _selectedSubjects.length <= 4;
@@ -149,7 +154,7 @@ class UnlockProvider extends ChangeNotifier {
 
       if (!hasInternet) {
         _errorMessage =
-        'No internet connection. Please check your network and try again.';
+            'No internet connection. Please check your network and try again.';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -183,7 +188,7 @@ class UnlockProvider extends ChangeNotifier {
 
       return true;
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _errorMessage = await _friendlyError(e);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -211,12 +216,47 @@ class UnlockProvider extends ChangeNotifier {
           _examType,
           _selectedInstitution,
         );
+
+        // Sort Use of English first, then Math, then others for JAMB
+        if (_examType == 'jamb') {
+          final englishSubjects = <String>[];
+          final mathSubjects = <String>[];
+          final otherSubjects = <String>[];
+          for (final sub in _availableSubjects) {
+            final lower = sub.toLowerCase();
+            if (lower.contains('english') && !lower.contains('literature')) {
+              englishSubjects.add(sub);
+            } else if (lower.contains('math')) {
+              mathSubjects.add(sub);
+            } else {
+              otherSubjects.add(sub);
+            }
+          }
+          otherSubjects.sort(
+            (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+          );
+          _availableSubjects = [
+            ...englishSubjects,
+            ...mathSubjects,
+            ...otherSubjects,
+          ];
+        }
+
+        // Auto select English for JAMB
+        if (_examType == 'jamb') {
+          for (final sub in _availableSubjects) {
+            if (sub.toLowerCase().contains('english') &&
+                !sub.toLowerCase().contains('literature')) {
+              _selectedSubjects.add(sub);
+            }
+          }
+        }
       }
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _errorMessage = await _friendlyError(e);
       _isLoading = false;
       notifyListeners();
     }
@@ -253,7 +293,7 @@ class UnlockProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _errorMessage = await _friendlyError(e);
       _isLoading = false;
       notifyListeners();
     }
@@ -261,6 +301,11 @@ class UnlockProvider extends ChangeNotifier {
 
   void toggleSubject(String subject) {
     if (_selectedSubjects.contains(subject)) {
+      if (_examType == 'jamb' &&
+          subject.toLowerCase().contains('english') &&
+          !subject.toLowerCase().contains('literature')) {
+        return; // Use of English cannot be deselected for JAMB
+      }
       _selectedSubjects.remove(subject);
       _errorMessage = '';
     } else {
@@ -315,8 +360,6 @@ class UnlockProvider extends ChangeNotifier {
       return false;
     }
 
-    final lowerExamType = _examType.toLowerCase().trim();
-
     // REMOVED the restrictive local `alreadyUnlocked` check.
     // We now rely entirely on the UnlockService to determine if the
     // existing package has expired or is still active.
@@ -330,7 +373,7 @@ class UnlockProvider extends ChangeNotifier {
 
       if (!hasInternet) {
         _errorMessage =
-        'No internet connection. Please check your network and try again.';
+            'No internet connection. Please check your network and try again.';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -340,17 +383,15 @@ class UnlockProvider extends ChangeNotifier {
 
       // This service will now throw an error if they have an ACTIVE, unexpired subscription.
       // If it's expired, it will safely overwrite it with the new code and new 10-month timer.
+      // Who is activating, which exam, and for how long are the backend's to
+      // decide, from the token and the voucher.
       await _service.activateExam(
         voucherCode: _voucherCode,
-        userId: currentUser.uid,
-        examType: lowerExamType,
         institutionId: _selectedInstitution,
         subjects: selectedSubjectsToUnlock,
-        userName: currentUser.displayName,
         selectedSectionId: isPostUtme ? _selectedSectionId : null,
         selectedSectionName: isPostUtme ? _selectedSectionName : null,
       );
-
 
       _isLoading = false;
       notifyListeners();
@@ -363,10 +404,61 @@ class UnlockProvider extends ChangeNotifier {
     } catch (e) {
       // The exception from UnlockService ("You already have an active subscription...")
       // will be caught and displayed here.
-      _errorMessage = e.toString().replaceAll('Exception: ', '');
+      _errorMessage = await _friendlyError(e);
       _isLoading = false;
       notifyListeners();
       return false;
     }
+  }
+
+  /// Converts raw exceptions (especially Firebase ones) into short,
+  /// user-friendly messages so users never see internal SDK error strings.
+  Future<String> _friendlyError(Object e) async {
+    final hasInternet = await NetworkService.instance.hasInternet();
+    if (!hasInternet) {
+      return 'No internet connection. Please check your network and try again.';
+    }
+
+    if (e is FirebaseException) {
+      switch (e.code) {
+        case 'unavailable':
+        case 'deadline-exceeded':
+          return 'This service is currently unavailable. Please try again later or contact our support team.';
+        case 'permission-denied':
+          return 'Access denied. Please log out and log back in, then try again.';
+        case 'not-found':
+          return 'Data not found. The activation code may be invalid or already used.';
+        case 'already-exists':
+          return 'This activation code has already been used.';
+        case 'unauthenticated':
+          return 'Your session has expired. Please log out and log back in.';
+        default:
+          return 'Something went wrong. Please try again. (${e.code})';
+      }
+    }
+
+    final msg = e.toString();
+
+    // Network / socket errors that don't come as FirebaseException
+    if (msg.contains('unavailable') ||
+        msg.contains('network') ||
+        msg.contains('SocketException') ||
+        msg.contains('TimeoutException') ||
+        msg.contains('deadline') ||
+        msg.contains('Connection refused') ||
+        msg.contains('ClientException') ||
+        msg.contains('Failed to fetch') ||
+        msg.contains('503') ||
+        msg.contains('403') ||
+        msg.contains('404') ||
+        msg.contains('Html') ||
+        msg.contains('parser')) {
+      return 'This service is currently unavailable. Please try again later or contact our support team.';
+    }
+
+    // Strip Flutter/Dart exception wrapper
+    return msg
+        .replaceAll('Exception: ', '')
+        .replaceAll('FirebaseException: ', '');
   }
 }

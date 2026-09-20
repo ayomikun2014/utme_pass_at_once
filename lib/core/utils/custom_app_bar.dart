@@ -6,6 +6,7 @@ import '../../features/user/providers/notification_provider.dart';
 import '../services/tutorial_service.dart';
 
 import 'back_arrow.dart';
+import '../constants/app_colors.dart';
 
 class CustomAppBar extends StatelessWidget {
   final String title;
@@ -49,6 +50,7 @@ class CustomAppBar extends StatelessWidget {
 
     return SliverAppBar(
       pinned: true,
+      automaticallyImplyLeading: false,
       floating: false,
       elevation: 0,
       scrolledUnderElevation: 4.0,
@@ -85,8 +87,10 @@ class CustomAppBar extends StatelessWidget {
               if (title.startsWith('Hello,')) {
                 bellWidget = TutorialService.instance.buildShowcase(
                   key: TutorialService.instance.notificationKey,
-                  title: 'Notification Center 🔔',
-                  description: 'Stay updated on core app functions, activate purchase codes, or receive announcements and updates from the super admin.',
+                  icon: Icons.notifications_rounded,
+                  accent: const Color(0xFFF59E0B),
+                  title: 'Your alerts',
+                  description: 'New activation codes, payment updates and announcements land here. The red dot means something is waiting for you.',
                   context: context,
                   isCircleBorder: true,
                   child: bellWidget,
@@ -176,8 +180,10 @@ class CustomAppBar extends StatelessWidget {
                               if (title.startsWith('Hello,')) {
                                 titleWidget = TutorialService.instance.buildShowcase(
                                   key: TutorialService.instance.welcomeKey,
-                                  title: 'Welcome to Pass At Once! 👋',
-                                  description: 'Tap your greeting to view and manage your profile. Below is your home dashboard where you can see your overall study status.',
+                                  icon: Icons.person_rounded,
+                                  accent: AppColors.primary,
+                                  title: 'Welcome to Pass At Once',
+                                  description: 'This is your home. Tap your name at any time to open your profile, orders and account settings.',
                                   context: context,
                                   child: titleWidget,
                                 );
@@ -222,14 +228,16 @@ class CustomAppBar extends StatelessWidget {
                             ),
                           ),
                           child: ClipOval(
-                            child: CachedNetworkImage(
-                              imageUrl: logoUrl!,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) =>
-                                  const SizedBox.shrink(),
-                              errorWidget: (context, url, error) =>
-                                  const Icon(Icons.school, color: Colors.white, size: 24),
-                            ),
+                            child: logoUrl!.startsWith('assets/')
+                                ? Image.asset(logoUrl!, fit: BoxFit.cover)
+                                : CachedNetworkImage(
+                                    imageUrl: logoUrl!,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) =>
+                                        const SizedBox.shrink(),
+                                    errorWidget: (context, url, error) =>
+                                        const Icon(Icons.school, color: Colors.white, size: 24),
+                                  ),
                           ),
                         ),
                       ],

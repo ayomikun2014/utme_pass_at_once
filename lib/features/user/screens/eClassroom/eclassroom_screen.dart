@@ -267,8 +267,10 @@ class _EClassroomScreenState extends State<EClassroomScreen> {
                           if (index == 0) {
                             cardWidget = TutorialService.instance.buildShowcase(
                               key: TutorialService.instance.eclassroomCentersKey,
-                              title: 'Classroom Centers 🏫',
-                              description: 'Access tests, assignments, notice boards, and study notes provided directly by your center administrators!',
+                              icon: Icons.apartment_rounded,
+                              accent: const Color(0xFF0891B2),
+                              title: 'Your centre',
+                              description: 'Tests, assignments, notices and notes posted by your own centre. Open a centre to see what your teacher has set.',
                               context: context,
                               child: cardWidget,
                             );

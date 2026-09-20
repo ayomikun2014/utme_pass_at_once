@@ -72,7 +72,7 @@ class _MyPurchaseState extends State<MyPurchase> {
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
-                const CustomAppBar(title: 'Order History', isLeading: true),
+                const CustomAppBar(title: 'My Orders', isLeading: true),
                 FutureBuilder<List<PurchaseModel>>(
                   future: _purchasesFuture,
                   builder: (context, snapshot) {
@@ -94,7 +94,7 @@ class _MyPurchaseState extends State<MyPurchase> {
                       return const SliverFillRemaining(
                         child: Center(
                           child: Text(
-                            'You have no purchases yet. Check out the store!',
+                            'You have no orders yet. Go to Buy Activation Code!',
                           ),
                         ),
                       );
@@ -467,6 +467,22 @@ class _MyPurchaseState extends State<MyPurchase> {
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),
+              if (purchase.canCancel)
+                OutlinedButton.icon(
+                  onPressed: () => _confirmCancel(context, purchase),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.close_rounded, size: 14),
+                  label: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                ),
               if (canBuyAgain)
                 OutlinedButton(
                   onPressed: () {
@@ -522,6 +538,68 @@ class _MyPurchaseState extends State<MyPurchase> {
         ],
       ),
     );
+  }
+
+  /// Call off a payment that has not produced a code, so a fresh one can be
+  /// started. A bank transfer waiting on an admin can be called off the same
+  /// way.
+  Future<void> _confirmCancel(
+    BuildContext context,
+    PurchaseModel purchase,
+  ) async {
+    final theme = Theme.of(context);
+    final isTransfer = purchase.paymentMethod == 'bank_transfer';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Cancel this payment?'),
+        content: Text(
+          isTransfer
+              ? 'Your receipt will no longer be reviewed, and you can make a new '
+                  'payment. If the admin has already approved it, your code still '
+                  'arrives.'
+              : 'This payment will be closed so you can start a new one. If your '
+                  'money did go through, the code is still created for you.',
+          style: theme.textTheme.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep it'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Yes, cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    final voucherProvider = context.read<VoucherProvider>();
+    final uid = context.read<AuthProvider>().currentUser?.uid ?? '';
+    final ok = await voucherProvider.cancelPurchase(
+      transactionId: purchase.id,
+      uid: uid,
+    );
+
+    if (!context.mounted) return;
+    CustomToast.show(
+      context,
+      ok
+          ? 'Payment cancelled. You can make a new one now.'
+          : 'Could not cancel it. Please check your connection and try again.',
+    );
+    if (ok && uid.isNotEmpty) {
+      await voucherProvider.fetchUserPurchases(uid);
+    }
   }
 
   void _showTransactionDetails(

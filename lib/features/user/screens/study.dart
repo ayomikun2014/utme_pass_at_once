@@ -60,8 +60,10 @@ class Study extends StatelessWidget {
                       if (index == 0) {
                         card = TutorialService.instance.buildShowcase(
                           key: TutorialService.instance.studyExamCardKey,
-                          title: 'Practice Materials 📖',
-                          description: 'Select an exam category to access past questions, study notes, syllabus, brochures, and the CBT simulator!',
+                          icon: Icons.menu_book_rounded,
+                          accent: AppColors.primary,
+                          title: 'Everything for one exam',
+                          description: 'Open an exam to find its past questions, syllabus, summarised notes and the CBT simulator in one place.',
                           context: context,
                           child: card,
                         );
@@ -114,47 +116,44 @@ class Study extends StatelessWidget {
     if (isPremiumOnThisDevice) {
       final activatedCenters = user.getExamCenters(examType);
 
-      if (activatedCenters.isEmpty) {
-        _showLocked(context, 'No activated package found for this exam');
-        return;
-      }
+      if (activatedCenters.isNotEmpty) {
+        bool hasMissingPackage = false;
+        String missingInstitutionId = '';
+        String? missingSectionId;
 
-      bool hasMissingPackage = false;
-      String missingInstitutionId = '';
-      String? missingSectionId;
+        for (final institutionKey in activatedCenters) {
+          // Use getSectionForInstitution for consistent sectionId with update.dart
+          final section = user.getSectionForInstitution(examType, institutionKey);
+          final sectionId = section?['id'];
 
-      for (final institutionKey in activatedCenters) {
-        // Use getSectionForInstitution for consistent sectionId with update.dart
-        final section = user.getSectionForInstitution(examType, institutionKey);
-        final sectionId = section?['id'];
+          final baseInstitutionId = examType == 'post_utme' && institutionKey.contains('_')
+              ? institutionKey.split('_').first
+              : institutionKey;
 
-        final baseInstitutionId = examType == 'post_utme' && institutionKey.contains('_')
-            ? institutionKey.split('_').first
-            : institutionKey;
+          final downloaded = await simProvider.isActivatedPackageDownloaded(
+            examType: examType,
+            institutionId: baseInstitutionId,
+            sectionId: sectionId,
+          );
 
-        final downloaded = await simProvider.isActivatedPackageDownloaded(
-          examType: examType,
-          institutionId: baseInstitutionId,
-          sectionId: sectionId,
-        );
-
-        if (!downloaded) {
-          hasMissingPackage = true;
-          missingInstitutionId = baseInstitutionId;
-          missingSectionId = sectionId;
-          break;
+          if (!downloaded) {
+            hasMissingPackage = true;
+            missingInstitutionId = baseInstitutionId;
+            missingSectionId = sectionId;
+            break;
+          }
         }
-      }
 
-      // If offline data is missing, prompt the user to download it
-      if (hasMissingPackage && context.mounted) {
-        _showMissingDataDialog(
-          context,
-          examType,
-          missingInstitutionId,
-          sectionId: missingSectionId,
-        );
-        return;
+        // If offline data is missing, prompt the user to download it
+        if (hasMissingPackage && context.mounted) {
+          _showMissingDataDialog(
+            context,
+            examType,
+            missingInstitutionId,
+            sectionId: missingSectionId,
+          );
+          return;
+        }
       }
     }
 
@@ -180,10 +179,16 @@ class Study extends StatelessWidget {
         String? sectionId,
       }) {
     final provider = context.read<SimulatorProvider>();
+    // The package records which subjects were bought; only those are fetched.
+    final user = context.read<AuthProvider>().currentUser;
+    final centerKey = (sectionId != null && sectionId.trim().isNotEmpty)
+        ? '${institutionId.toLowerCase()}_${sectionId.toLowerCase()}'
+        : institutionId.toLowerCase();
 
     final downloadFuture = provider.downloadActivationData(
       examType: examType,
       institutionId: institutionId,
+      subjects: user?.getSubjectsForCenter(examType, centerKey),
       sectionId: sectionId,
     );
 
@@ -358,20 +363,20 @@ final List<Map<String, dynamic>> _examTypes = [
     'gradientColors': [const Color(0xFF7C3AED), const Color(0xFF4F46E5)], // Royal Purple to Deep Indigo
   },
   {
+    'title': 'JAMB UTME',
+    'subtitle': 'UTME past questions, syllabus, brochure & simulator.',
+    'logo': 'assets/images/jamb.webp',
+    'examType': 'jamb',
+    'isComingSoon': false,
+    'gradientColors': [const Color(0xFF0D9488), const Color(0xFF0F766E)], // Sea Mint to Deep Teal
+  },
+  {
     'title': 'WAEC',
     'subtitle': 'SSCE past questions, syllabus & practice exams.',
     'logo': 'assets/images/waec.webp',
     'examType': 'waec',
     'isComingSoon': true,
     'gradientColors': [const Color(0xFFF43F5E), const Color(0xFFE11D48)], // Sunset Coral to Rose Red
-  },
-  {
-    'title': 'JAMB UTME',
-    'subtitle': 'UTME past questions, syllabus, brochure & simulator.',
-    'logo': 'assets/images/jamb.webp',
-    'examType': 'jamb',
-    'isComingSoon': true,
-    'gradientColors': [const Color(0xFF0D9488), const Color(0xFF0F766E)], // Sea Mint to Deep Teal
   },
   {
     'title': 'NECO',

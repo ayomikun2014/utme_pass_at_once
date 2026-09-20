@@ -43,16 +43,17 @@ class SyllabusProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- 1.5 Sync Storage and Refresh ---
+  // --- 1.5 Refresh ---
+  // New files are registered by the admin panel's syllabus sync; the app just
+  // reloads the list.
   Future<void> syncFiles(String examType) async {
     _isLoading = true;
     notifyListeners();
-    await _syllabusService.syncSyllabusFromStorage(examType);
-    await fetchSyllabi(examType); // Reload from Firestore
+    await fetchSyllabi(examType);
   }
 
   // --- 2. Start Download (Per Syllabus) ---
-  Future<void> startDownload(SyllabusModel syllabus) async {
+  Future<void> startDownload(SyllabusModel syllabus, {VoidCallback? onComplete}) async {
     // Do nothing if already downloading this syllabus
     if (_downloadingProgress.containsKey(syllabus.id)) return;
     
@@ -72,6 +73,9 @@ class SyllabusProvider extends ChangeNotifier {
         _downloadingProgress.remove(syllabus.id);
         syllabus.isDownloaded = true;
         notifyListeners();
+        if (onComplete != null) {
+          onComplete();
+        }
       },
       onError: (e) {
         debugPrint("Download error: $e");

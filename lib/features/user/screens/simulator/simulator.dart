@@ -53,6 +53,8 @@ class _SimulatorScreenState extends State<SimulatorScreen>
   bool _isLoading = true;
   bool _isSubmitting = false;
   DateTime? _examStartTime;
+  DateTime? _pausedTime;
+  int _activeSecondsSpent = 0;
 
   @override
   void initState() {
@@ -90,11 +92,30 @@ class _SimulatorScreenState extends State<SimulatorScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
+      _pausedTime = DateTime.now();
       _globalTimer?.cancel();
       _ttsService.stop();
-    } else if (state == AppLifecycleState.resumed) {
       if (!_isLoading && !_isSubmitting && _totalTimeRemaining.inSeconds > 0) {
-        _startGlobalTimer();
+        NotificationService.instance.showPushNotification(
+          title: 'Exam Timer Running Out!',
+          body: 'Your exam is still active. The timer is running and will NOT be paused.',
+        );
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_pausedTime != null) {
+        final elapsedBackground = DateTime.now().difference(_pausedTime!);
+        setState(() {
+          _totalTimeRemaining = _totalTimeRemaining - elapsedBackground;
+        });
+        _pausedTime = null;
+      }
+      if (!_isLoading && !_isSubmitting) {
+        if (_totalTimeRemaining.inSeconds > 0) {
+          _startGlobalTimer();
+        } else {
+          _totalTimeRemaining = Duration.zero;
+          _showTimeUpDialog();
+        }
       }
     }
   }
@@ -142,17 +163,18 @@ class _SimulatorScreenState extends State<SimulatorScreen>
         final durationMinutes = int.tryParse(_examConfig['durationMinutes']?.toString() ?? '') ?? 30;
         _totalTimeRemaining = Duration(minutes: durationMinutes);
       } else if (isFree) {
-        final year = subjectYears['aptitude'] ?? '2023';
+        final freeSubject = subjects.isNotEmpty ? subjects.first : 'aptitude';
+        final year = subjectYears[freeSubject] ?? '2014';
 
         debugPrint(
-          '🌐 [FREE LOAD] Loading aptitude: $examType/$institutionId/aptitude/$year',
+          '🌐 [FREE LOAD] Loading free subject $freeSubject: $examType/$institutionId/$freeSubject/$year',
         );
 
         // 1. Try to load from the specific cached questions first
         List<QuestionModel> questions = await simulatorService.loadCachedQuestions(
           examType: examType,
           institutionId: institutionId,
-          subject: 'aptitude',
+          subject: freeSubject,
           year: year,
         );
 
@@ -160,7 +182,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
         if (questions.isEmpty) {
           try {
             final box = await Hive.openBox<String>('offline_questions');
-            final generalData = box.get('free_aptitude_$year');
+            final generalData = box.get('free_${freeSubject}_$year');
             if (generalData != null && generalData.isNotEmpty) {
               final List<dynamic> decodedList = json.decode(generalData);
               questions = decodedList.map((item) {
@@ -168,7 +190,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
               }).toList();
             }
           } catch (e) {
-            debugPrint('⚠️ Error loading free aptitude from Hive cache: $e');
+            debugPrint('⚠️ Error loading free $freeSubject from Hive cache: $e');
           }
         }
 
@@ -178,19 +200,19 @@ class _SimulatorScreenState extends State<SimulatorScreen>
           questions = await simulatorService.fetchQuestionsOnline(
             examType: examType,
             institutionId: institutionId,
-            subject: 'aptitude',
+            subject: freeSubject,
             year: year,
           );
         }
 
         if (questions.isEmpty) {
-          throw Exception('No free aptitude questions available. Please check your internet connection and try again.');
+          throw Exception('No free $freeSubject questions available. Please check your internet connection and try again.');
         }
 
-        _subjects = ['aptitude'];
-        _subjectQuestions['aptitude'] = questions;
-        _subjectAnswers['aptitude'] = {};
-        _subjectFlags['aptitude'] = {};
+        _subjects = [freeSubject];
+        _subjectQuestions[freeSubject] = questions;
+        _subjectAnswers[freeSubject] = {};
+        _subjectFlags[freeSubject] = {};
       } else if (shuffleMode) {
         debugPrint('🔧 [PREMIUM OFFLINE] Loading shuffle questions from Hive');
 
@@ -362,6 +384,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
         setState(() {
           _totalTimeRemaining =
               _totalTimeRemaining - const Duration(seconds: 1);
+          _activeSecondsSpent++;
         });
 
         if (_totalTimeRemaining.inMinutes == 5 &&
@@ -600,6 +623,67 @@ class _SimulatorScreenState extends State<SimulatorScreen>
     );
   }
 
+  void _showPassageDialog(BuildContext context, Passage passage) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        final theme = Theme.of(context);
+        final isDark = theme.brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.surfaceDark : theme.scaffoldBackgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      passage.label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (passage.title != null && passage.title!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        passage.title!,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: RichContentRenderer(
+                blocks: passage.content,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _submitExam({bool autoSubmit = false}) async {
     final authProvider = context.read<AuthProvider>();
     final simProvider = context.read<SimulatorProvider>();
@@ -813,9 +897,11 @@ class _SimulatorScreenState extends State<SimulatorScreen>
         minutes:
         (_examConfig['timePerSubject'] as int? ?? 30) * _subjects.length,
       );
-      final totalTimeTaken = _examStartTime != null
-          ? DateTime.now().difference(_examStartTime!)
-          : fallbackTime;
+      final totalTimeTaken = _activeSecondsSpent > 0
+          ? Duration(seconds: _activeSecondsSpent)
+          : (_examStartTime != null
+              ? DateTime.now().difference(_examStartTime!)
+              : fallbackTime);
 
       final bool isClassroomTest = _examConfig['isClassroomTest'] as bool? ?? false;
       final bool isPractice = _examConfig['isPractice'] as bool? ?? false;
@@ -1408,6 +1494,28 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  currentQuestion.year,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+              ),
               Row(
                 children: [
                   GestureDetector(
@@ -1513,6 +1621,70 @@ class _SimulatorScreenState extends State<SimulatorScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (currentQuestion.passage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: TextButton.icon(
+                        onPressed: () => _showPassageDialog(context, currentQuestion.passage!),
+                        icon: const Icon(Icons.menu_book_rounded, size: 18),
+                        label: Text(
+                          currentQuestion.passage!.label,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          backgroundColor: isDark 
+                              ? AppColors.primary.withValues(alpha: 0.15) 
+                              : AppColors.primary.withValues(alpha: 0.05),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            side: BorderSide(
+                              color: AppColors.primary.withValues(alpha: 0.25),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (currentQuestion.instruction != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isDark 
+                              ? AppColors.primary.withValues(alpha: 0.15) 
+                              : AppColors.primary.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              currentQuestion.instruction!.label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: isDark ? AppColors.primaryDark : AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            RichContentRenderer(
+                              blocks: currentQuestion.instruction!.content,
+                              textStyle: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                                fontWeight: FontWeight.normal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   AnimationConfiguration.staggeredList(
                     position: 0,
                     duration: const Duration(milliseconds: 400),
@@ -1521,7 +1693,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                       child: FadeInAnimation(
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: isDark 
                                 ? AppColors.surfaceDark.withValues(alpha: 0.5) 
@@ -1541,7 +1713,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
 
                   ...List.generate(currentQuestion.options.length, (index) {
                     final option = currentQuestion.options[index].key;
@@ -1555,13 +1727,13 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                         verticalOffset: 30.0,
                         child: FadeInAnimation(
                           child: Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.only(bottom: 6),
                             child: GestureDetector(
                               onTap: () => _answerQuestion(option),
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
                                 width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
                                   color: isSelected
                                       ? AppColors.primary.withValues(alpha: 0.08)
@@ -1589,8 +1761,8 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                                       duration: const Duration(
                                         milliseconds: 200,
                                       ),
-                                      width: 28,
-                                      height: 28,
+                                      width: 26,
+                                      height: 26,
                                       decoration: BoxDecoration(
                                         color: isSelected
                                             ? AppColors.primary
@@ -1620,7 +1792,7 @@ class _SimulatorScreenState extends State<SimulatorScreen>
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 8),
                                     Expanded(
                                       child: RichContentRenderer(
                                         blocks: optionBlocks,
@@ -1802,8 +1974,11 @@ class _SimulatorScreenState extends State<SimulatorScreen>
     final isLastQ = safeIndex == questions.length - 1;
     final isLastSubject = _tabController!.index == _subjects.length - 1;
 
+    final double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final double safeBottom = bottomPadding > 0 ? bottomPadding + 12.0 : 26.0;
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, safeBottom),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         border: Border(

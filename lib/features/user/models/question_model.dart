@@ -159,6 +159,92 @@ class OptionModel {
 }
 
 // =============================================================================
+// PASSAGE MODEL
+// =============================================================================
+
+class Passage {
+  final String id;
+  final String label;
+  final String? title;
+  final List<ContentBlockModel> content;
+  final List<Map<String, String>> images;
+
+  Passage({
+    required this.id,
+    required this.label,
+    this.title,
+    required this.content,
+    required this.images,
+  });
+
+  factory Passage.fromJson(Map<String, dynamic> json) {
+    final parsedImages = _parseImageList(json['images']);
+    final rawContent = (json['content'] ?? '').toString();
+    return Passage(
+      id: (json['id'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      title: json['title']?.toString(),
+      images: parsedImages,
+      content: parseInlineLatexString(rawContent, images: parsedImages),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final serialized = _blocksToInlineStringWithImages(content);
+    return {
+      'id': id,
+      'label': label,
+      'title': title,
+      'content': serialized.text,
+      'images': images,
+    };
+  }
+}
+
+// =============================================================================
+// INSTRUCTION MODEL
+// =============================================================================
+
+class Instruction {
+  final String id;
+  final String label;
+  final List<ContentBlockModel> content;
+
+  /// Diagrams belonging to the reference itself -- a circuit or a graph that
+  /// several questions are asked about. Carried the same way a passage or a
+  /// question carries its images.
+  final List<Map<String, String>> images;
+
+  Instruction({
+    required this.id,
+    required this.label,
+    required this.content,
+    this.images = const [],
+  });
+
+  factory Instruction.fromJson(Map<String, dynamic> json) {
+    final parsedImages = _parseImageList(json['images']);
+    final rawContent = (json['content'] ?? '').toString();
+    return Instruction(
+      id: (json['id'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      images: parsedImages,
+      content: parseInlineLatexString(rawContent, images: parsedImages),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    final serialized = _blocksToInlineStringWithImages(content);
+    return {
+      'id': id,
+      'label': label,
+      'content': serialized.text,
+      if (images.isNotEmpty) 'images': images,
+    };
+  }
+}
+
+// =============================================================================
 // QUESTION MODEL
 // =============================================================================
 
@@ -168,6 +254,10 @@ class QuestionModel {
   final String examType;
   final String subject;
   final String year;
+  final String? passageRef;
+  final Passage? passage;
+  final String? instructionRef;
+  final Instruction? instruction;
 
   // Rich content block fields (populated from either format)
   final List<ContentBlockModel> content;
@@ -181,6 +271,10 @@ class QuestionModel {
     required this.examType,
     required this.subject,
     required this.year,
+    this.passageRef,
+    this.passage,
+    this.instructionRef,
+    this.instruction,
     required this.content,
     required this.options,
     required this.answer,
@@ -214,15 +308,26 @@ class QuestionModel {
     required String institutionId,
     required String subjectId,
     required int year,
+    Map<String, Passage>? passages,
+    Map<String, Instruction>? instructions,
   }) {
     final qImages = _parseImageList(json['images']);
     final expImages = _parseImageList(json['explanationImages']);
+    final ref = json['passageRef']?.toString();
+    final resolvedPassage = (ref != null && passages != null) ? passages[ref] : null;
+    final instRef = json['instructionRef']?.toString();
+    final resolvedInstruction = (instRef != null && instructions != null) ? instructions[instRef] : null;
+
     return QuestionModel(
       id: (json['id'] ?? '').toString(),
       number: (json['number'] as num?)?.toInt() ?? 0,
       examType: examType.toLowerCase(),
       subject: subjectId.toLowerCase(),
       year: year.toString(),
+      passageRef: ref,
+      passage: resolvedPassage,
+      instructionRef: instRef,
+      instruction: resolvedInstruction,
       content: parseInlineLatexString(
         (json['question'] ?? '').toString(),
         images: qImages,
@@ -239,12 +344,23 @@ class QuestionModel {
   factory QuestionModel.fromFullJson(Map<String, dynamic> json) {
     final qImages = _parseImageList(json['images']);
     final expImages = _parseImageList(json['explanationImages']);
+    final ref = json['passageRef']?.toString();
+    final pJson = json['passage'] as Map<String, dynamic>?;
+    final resolvedPassage = pJson != null ? Passage.fromJson(pJson) : null;
+    final instRef = json['instructionRef']?.toString();
+    final iJson = json['instruction'] as Map<String, dynamic>?;
+    final resolvedInstruction = iJson != null ? Instruction.fromJson(iJson) : null;
+
     return QuestionModel(
       id: (json['id'] ?? '').toString(),
       number: (json['number'] as num?)?.toInt() ?? 0,
       examType: (json['examType'] ?? '').toString().toLowerCase(),
       subject: (json['subject'] ?? json['subjectId'] ?? '').toString().toLowerCase(),
       year: (json['year'] ?? '').toString(),
+      passageRef: ref,
+      passage: resolvedPassage,
+      instructionRef: instRef,
+      instruction: resolvedInstruction,
       content: parseInlineLatexString(
         (json['question'] ?? '').toString(),
         images: qImages,
@@ -274,6 +390,10 @@ class QuestionModel {
       'options': options.map((o) => o.toJson()).toList(),
       'answer': answer,
       'explanationSteps': expResult.steps,
+      'passageRef': passageRef,
+      if (passage != null) 'passage': passage!.toJson(),
+      'instructionRef': instructionRef,
+      if (instruction != null) 'instruction': instruction!.toJson(),
     };
 
     if (qResult.images.isNotEmpty) {
@@ -316,6 +436,13 @@ List<Map<String, String>> _parseImageList(dynamic value) {
 List<ContentBlockModel> parseInlineLatexString(
   String input, {
   List<Map<String, String>> images = const [],
+  /// Add images the text never referred to with a {{IMG_N}} marker. Off for
+  /// callers that parse one piece of a longer passage at a time -- otherwise
+  /// every piece would repeat the same picture.
+  bool appendUnreferencedImages = true,
+  /// Filled with the indexes of images placed by a marker, so a caller
+  /// splitting text into parts can add what is left over exactly once.
+  Set<int>? referencedImages,
 }) {
   if (input.isEmpty) return [];
 
@@ -324,8 +451,21 @@ List<ContentBlockModel> parseInlineLatexString(
   final hasImageMarkers = imgMarkerRegex.hasMatch(input);
 
   if (!hasImageMarkers) {
-    // No image markers — just parse text/latex
-    return _parseTextLatex(input);
+    // No image markers — just parse text/latex. Any images that came with the
+    // text still belong to it (a diagram attached to a reference, say), so
+    // they follow the words rather than being dropped.
+    final blocks = _parseTextLatex(input);
+    if (appendUnreferencedImages) {
+      for (final image in images) {
+        blocks.add(ContentBlockModel(
+          type: 'image',
+          src: image['src'],
+          alt: image['alt'],
+          format: image['format'],
+        ));
+      }
+    }
+    return blocks;
   }
 
   // Split on image markers and interleave text + image blocks
@@ -342,6 +482,7 @@ List<ContentBlockModel> parseInlineLatexString(
     // Insert the image block
     final imgIndex = int.tryParse(match.group(1)!) ?? -1;
     if (imgIndex >= 0 && imgIndex < images.length) {
+      referencedImages?.add(imgIndex);
       blocks.add(ContentBlockModel(
         type: 'image',
         src: images[imgIndex]['src'],
@@ -422,11 +563,41 @@ List<ContentBlockModel> _parseExplanationSteps(
   if (steps == null) return [];
   if (steps is! List) return [];
 
+  // The steps are parsed one at a time, so the images are held back until the
+  // end: handing them to every step would show the same diagram once per step.
   final blocks = <ContentBlockModel>[];
+  final referenced = <int>{};
+  // One diagram belongs to the explanation once, however many steps mention
+  // it. This also cleans up explanations already saved with a repeat.
+  final seenImages = <String>{};
+  void addBlock(ContentBlockModel block) {
+    if (block.isImage) {
+      final src = (block.src ?? '').trim();
+      if (src.isNotEmpty && !seenImages.add(src)) return;
+    }
+    blocks.add(block);
+  }
+
   for (final step in steps) {
     final stepStr = step.toString().trim();
     if (stepStr.isEmpty) continue;
-    blocks.addAll(parseInlineLatexString(stepStr, images: images));
+    parseInlineLatexString(
+      stepStr,
+      images: images,
+      appendUnreferencedImages: false,
+      referencedImages: referenced,
+    ).forEach(addBlock);
+  }
+
+  // Whatever no step pointed at belongs to the explanation as a whole.
+  for (var i = 0; i < images.length; i++) {
+    if (referenced.contains(i)) continue;
+    addBlock(ContentBlockModel(
+      type: 'image',
+      src: images[i]['src'],
+      alt: images[i]['alt'],
+      format: images[i]['format'],
+    ));
   }
   return blocks;
 }

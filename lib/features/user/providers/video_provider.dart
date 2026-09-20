@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/video_model.dart';
-import '../services/video_service.dart';
 
 class VideoProvider extends ChangeNotifier {
-  final VideoService _videoService = VideoService();
   StreamSubscription<QuerySnapshot>? _videoSubscription;
 
   List<VideoModel> _allVideos = [];
@@ -46,13 +44,7 @@ class VideoProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      // Wrap stream bootstrap inside a safe environment to prevent unhandled provider failures
-      try {
-        _startVideoListener();
-      } catch (streamError) {
-        debugPrint("Real-time stream negotiation failed: $streamError");
-        await loadVideos(); // Fallback cleanly to isolated cache/fetch blocks
-      }
+      _startVideoListener();
     } catch (e) {
       debugPrint("Error initializing VideoProvider settings: $e");
       _isLoading = false;
@@ -96,12 +88,11 @@ class VideoProvider extends ChangeNotifier {
       notifyListeners();
       await _saveCachedVideos();
     }, onError: (err) {
-      debugPrint("Video Stream Error: $err");
+      // The list already on screen came from the local cache, so a dropped
+      // stream leaves the reader with videos rather than an empty page.
+      debugPrint("Video stream error: $err");
       _isLoading = false;
       notifyListeners();
-      
-      // Fallback: load once using the service if stream fails
-      loadVideos();
     });
   }
 
@@ -109,23 +100,6 @@ class VideoProvider extends ChangeNotifier {
   void dispose() {
     _videoSubscription?.cancel();
     super.dispose();
-  }
-
-  Future<void> loadVideos() async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      final list = await _videoService.fetchAllVideos();
-      if (list.isNotEmpty) {
-        _allVideos = list;
-        await _saveCachedVideos();
-      }
-    } catch (e) {
-      debugPrint("Error loading videos: $e");
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> setTrack(String track) async {
